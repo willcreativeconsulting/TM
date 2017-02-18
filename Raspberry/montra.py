@@ -42,26 +42,26 @@ def play_video(year):
 		print('-' + year + '/')
 		#player.load(black)
 		time_to_wait = 0
-		#if read_serial() == "READY":
-		if 1:
+		if read_serial() == "READY":
+		#if 1:
 			if year == "1910":
-				#myprocess = subprocess.Popen(['omxplayer','-b',_1910],stdin=subprocess.PIPE)
-				myprocess = subprocess.Popen(['omxplayer', _1910],stdin=subprocess.PIPE)
+				myprocess = subprocess.Popen(['omxplayer','-b',_1910],stdin=subprocess.PIPE)
+				#myprocess = subprocess.Popen(['omxplayer', _1910],stdin=subprocess.PIPE)
 				sleep(5)
 				myprocess.stdin.write('q')
 			if year == "1920":
-				#myprocess = subprocess.Popen(['omxplayer','-b',_1920],stdin=subprocess.PIPE)
-				myprocess = subprocess.Popen(['omxplayer', _1920],stdin=subprocess.PIPE)
+				myprocess = subprocess.Popen(['omxplayer','-b',_1920],stdin=subprocess.PIPE)
+				#myprocess = subprocess.Popen(['omxplayer', _1920],stdin=subprocess.PIPE)
 				sleep(5)
 				myprocess.stdin.write('q')
 			if year == "1930":
-				#myprocess = subprocess.Popen(['omxplayer','-b',_1930],stdin=subprocess.PIPE)
-				myprocess = subprocess.Popen(['omxplayer', _1930],stdin=subprocess.PIPE)
+				myprocess = subprocess.Popen(['omxplayer','-b',_1930],stdin=subprocess.PIPE)
+				#myprocess = subprocess.Popen(['omxplayer', _1930],stdin=subprocess.PIPE)
 				sleep(5)
 				myprocess.stdin.write('q')
 			if year == "1940":
-				#myprocess = subprocess.Popen(['omxplayer','-b',_1940],stdin=subprocess.PIPE)
-				myprocess = subprocess.Popen(['omxplayer', _1940],stdin=subprocess.PIPE)
+				myprocess = subprocess.Popen(['omxplayer','-b',_1940],stdin=subprocess.PIPE)
+				#myprocess = subprocess.Popen(['omxplayer', _1940],stdin=subprocess.PIPE)
 				sleep(5)
 				myprocess.stdin.write('q')
 	except:
