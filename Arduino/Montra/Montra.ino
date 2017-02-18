@@ -1,7 +1,5 @@
 #include <Servo.h>
 
-//Hello
-
 #define enc_a 2 
 #define enc_b 3
 #define out_a 6
@@ -435,8 +433,8 @@ void loop()
   
   // put your main code here, to run repeatedly:
   
-  set_lever(100,1);
-  set_lever(100,2);
+  //set_lever(100,1);
+  //set_lever(100,2);
 
   update_motor();
   update_lever();
