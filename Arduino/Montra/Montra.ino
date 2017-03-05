@@ -6,11 +6,23 @@
 #define out_a 6
 #define out_b 7
 
-//---------------------Motor da apulheta
+#define motor_enable  A7
+#define motor_enable_ampulheta  A6
+#define fb_sensor 12
+//---------------------Motor da ampulheta
 #define enc_c 20 
 #define enc_d 21
 #define out_c 8
 #define out_d 9
+
+#define fb_sensor_ampulheta 11
+
+//--------------------Reles
+#define main_switch A0
+#define relay_0 16
+#define relay_1 17
+
+
 
 #define STEPS_PER_REV 1920
 #define MAX_SPEED_PER_REV 400 //value in millis 
@@ -59,13 +71,24 @@ enum states
   WAITING_TO_REACH,
   SET_LEVERS_FORWARD,
   SET_LEVERS_FORWARD_WAITING,
-  SET_LEVERS_BACK_WAITING
+  SET_LEVERS_BACK_WAITING,
+  GOTO_AMPULHETA_HIGH,
+  GOTO_AMPULHETA_LOW,
 };
 
-#define _1910_POS   10
-#define _1920_POS   300
-#define _1930_POS   180
-#define _1940_POS   100
+#define _1910_POS   36
+#define _1920_POS   36*2
+#define _1930_POS   36*3
+#define _1940_POS   36*4
+#define _1950_POS   36*5
+#define _1960_POS   36*6
+#define _1970_POS   36*7
+#define _1980_POS   36*8
+
+#define AMPULHETA_HIGH  0
+#define AMPULHETA_LOW  180
+
+
 
 //motor id 0: relogio
 //motor id 1: ampulheta
@@ -87,6 +110,11 @@ void setup()
   pinMode(enc_c, INPUT);
   pinMode(enc_d, INPUT);
 
+  pinMode(fb_sensor, INPUT);
+  pinMode(fb_sensor_ampulheta, INPUT);
+  pinMode(main_switch, INPUT_PULLUP);
+
+
   //link the interupts to the encoder pins
   attachInterrupt(digitalPinToInterrupt(enc_a), update_enc_relogio, CHANGE);
   attachInterrupt(digitalPinToInterrupt(enc_b), update_enc_relogio, CHANGE);
@@ -98,7 +126,15 @@ void setup()
   pinMode(out_b, OUTPUT); 
   
   pinMode(out_c, OUTPUT);
-  pinMode(out_d, OUTPUT); 
+  pinMode(out_d, OUTPUT);
+
+  pinMode(motor_enable, OUTPUT);
+  pinMode(motor_enable_ampulheta, OUTPUT);
+
+  pinMode(relay_0, OUTPUT);
+  pinMode(relay_1, OUTPUT);
+
+
 }
 
 //Function that will be associated with the encoder interrupts (Relogio)
@@ -313,6 +349,31 @@ void speed_controller(int id)
 }
 
 
+bool set_feedback_motor(int id){
+  bool fb = false;
+  digitalWrite(motor_enable,1);
+  digitalWrite(motor_enable_ampulheta,1);
+
+  if(id == 0){
+    fb = digitalRead(fb_sensor); 
+  } else {
+    fb = digitalRead(fb_sensor_ampulheta);
+  }
+  
+  if(fb){
+    set_speed(0.2, id);
+    return false;
+  } else {
+    set_speed(0, id);
+    enc_count[id] = 0;
+    prev_enc_count[id] = 0;
+    return true;
+  }
+
+  
+}
+
+
 void update_motor(int id)
 {
   unsigned long actual_time = millis();
@@ -326,16 +387,17 @@ void update_motor(int id)
     //expected steps per second
     enc_steps*=(1000/TIME_CONSTANT);
     rev_sec[id] = (float) (enc_steps*1.1/(STEPS_PER_REV*1.1));
-       
-    /*Serial.print(" enc_steps:");
+
+    /*   
+    Serial.print(" enc_steps:");
     Serial.print((int)enc_steps);
     Serial.print(" enc_count[%i]:", id);
     Serial.print((int)enc_count[id]);
     Serial.print(" prev_enc_count[%i]:", id);
     Serial.print((int)prev_enc_count[id]);
     Serial.print(" rev_sec[%s]:", id);
-    Serial.println((float)rev_sec[id]);*/
-    
+    Serial.println((float)rev_sec[id]);
+    // */    
     //deg_position[id] = ((float)((enc_count[id]*1.0)/(STEPS_PER_REV*1.0))- (int)(enc_count[id]/STEPS_PER_REV))*360;
     deg_position[id] = ((float)((enc_count[id]*1.0)/(STEPS_PER_REV*1.0)))*360;
     
@@ -403,18 +465,56 @@ int process_serial()
 
 void send_new_year(int year)
 {
+  if(year == 0){
+    Serial1.print("-0000/");
+  }
   Serial1.print("-");
   Serial1.print(year,DEC);
   Serial1.print("/");  
 }
 
-void motor_statemachine(int id)
+
+
+void ampulheta_state_machine(){
+
+  switch(sm_motor[1]){
+    case START:
+      if(set_feedback_motor(1)){
+        sm_motor[1] = GOTO_AMPULHETA_HIGH;
+        sm_timer[1] = millis() + 1000*5;
+      }
+      break;
+    case GOTO_AMPULHETA_HIGH:
+      if(sm_timer[1] < millis()){
+        set_position(AMPULHETA_HIGH, 1);
+        sm_motor[1] = GOTO_AMPULHETA_LOW;
+        sm_timer[1] = millis() + 1000*5;
+      }
+    break;
+
+    case GOTO_AMPULHETA_LOW:
+      if(sm_timer[1] < millis()){
+        set_position(AMPULHETA_LOW, 1);
+        sm_motor[1] = GOTO_AMPULHETA_HIGH;
+        sm_timer[1] = millis() + 1000*5;
+      }
+    break;
+
+
+
+
+    
+  }
+}
+
+void motor_statemachine()
 {
-  switch(sm_motor[id])
+  switch(sm_motor[0])
   {
     case START:
-      sm_motor[id] = WAITING_NEW_YEAR;
-      set_position(0, 0);
+//copiar o estado start para a nova maquina de estados 
+      if(set_feedback_motor(0))
+        sm_motor[0] = WAITING_NEW_YEAR;
       break;
     case WAITING_NEW_YEAR:
       if(last_year_received != year_received)
@@ -440,68 +540,109 @@ void motor_statemachine(int id)
         
         send_new_year(9999);
         last_year_received = year_received;
-        sm_timer[id] = millis() + 100;
-        sm_motor[id] = WAITING_TO_REACH;
+        sm_timer[0] = millis() + 100;
+        sm_motor[0] = WAITING_TO_REACH;
 
 year_not_present:
         int a=0; //dummy label
       }
       break;
     case WAITING_TO_REACH:
-      if(desired_position_reached[id] && sm_timer[id] < millis())
+      if(desired_position_reached[0] && sm_timer[0] < millis())
       {
         Serial.print('r');
         send_new_year(last_year_received);
-        sm_motor[id] = SET_LEVERS_FORWARD;
+        sm_motor[0] = SET_LEVERS_FORWARD;
       }
       break;
     case SET_LEVERS_FORWARD:
       set_lever(1,0);
       set_lever(179,1);
-      sm_timer[id] = millis()+1000;
-      sm_motor[id] = SET_LEVERS_FORWARD_WAITING;
+      sm_timer[0] = millis()+1000;
+      sm_motor[0] = SET_LEVERS_FORWARD_WAITING;
       break;
     case SET_LEVERS_FORWARD_WAITING:
-      if(sm_timer[id] < millis())
+      if(sm_timer[0] < millis())
       {
         set_lever(179,0);
         set_lever(1,1);
-        sm_timer[id] = millis()+1000;
-        sm_motor[id] = SET_LEVERS_BACK_WAITING;
+        sm_timer[0] = millis()+1000;
+        sm_motor[0] = SET_LEVERS_BACK_WAITING;
       }
       break;
     case SET_LEVERS_BACK_WAITING:
-      if(sm_timer[id] < millis())
+      if(sm_timer[0] < millis())
       {
-        sm_motor[id] = WAITING_NEW_YEAR;
+        sm_motor[0] = WAITING_NEW_YEAR;
       }
       break;
   }
 }
 
 
+void verify_switch(){
+  static bool prev_state = false;
+  static unsigned long prev_timer = millis();  
+  int i=0;
+
+
+  if(prev_state != digitalRead(main_switch)){
+    prev_state = digitalRead(main_switch);
+    if(!digitalRead(main_switch)){
+      digitalWrite(relay_0,0);
+      digitalWrite(motor_enable,1);
+      digitalWrite(motor_enable_ampulheta,1);
+      
+      
+      
+    } else {
+      prev_timer = millis() + 10000;
+      
+      digitalWrite(motor_enable,0);
+      digitalWrite(motor_enable_ampulheta,0);
+      
+      for(i = 0; i<2;i++){
+        enc_count[i] = 0;
+        prev_enc_count[i] = 0;
+        sm_motor[i] = START;
+        Serial.print("X");
+        Serial.print("X");
+        Serial.print("X");
+        Serial.print("X");
+        Serial.print("X");
+        
+      }
+    }
+  }
+  if(digitalRead(main_switch)){
+    if(prev_timer < millis()) {
+      digitalWrite(relay_0,1);    
+      send_new_year(0);
+    }
+    
+  }
+}
+
 void loop() 
 { 
   // put your main code here, to run repeatedly:
   
-  //Calibrate the motors (only one time)
-  /*for(int i=0; i<2; i++)
-  {
-    while(calibrate_position[i] == false)
-    {
-      //call calibration routine
-      //calibrate_position[i] = calibrate_motor(i);
-    }
-  }*/
-  
-  update_motor(0);
-  
-  update_lever(0);
-  update_lever(1);
-  
-  process_serial();
 
-  motor_statemachine(0);
+  verify_switch();
+ 
+  if(!digitalRead(main_switch)){
+    update_motor(0);
+    update_motor(1);
+    
+    update_lever(0);
+    update_lever(1);
+    
+    process_serial();
+  
+    motor_statemachine();
+    ampulheta_state_machine();
+  }
+
 }
 
 

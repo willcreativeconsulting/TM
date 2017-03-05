@@ -180,10 +180,21 @@ void set_7_segment_value(int value){
   static unsigned long timer = millis();
   static int rand_number = 0;
 
+
+  if(value == 0000){
+    //turn off the digits
+    digit_4 = 11;
+    digit_3 = 11;
+    digit_2 = 11;
+    digit_1 = 11;
+
+    return;
+  }
+
   if(value == 9999 && timer < millis()){
     
     timer = millis() + 100;
-    rand_number = random(1,9999);
+    rand_number = random(2,9999);
     
   }
   if(value == 9999)
@@ -197,6 +208,7 @@ void set_7_segment_value(int value){
   digit_2 = (value - (value /1000)*1000)/100;
   value -= digit_2*100;
   digit_1 = (value - (value /10000)*10000)/1000;
+
   
   
 }
