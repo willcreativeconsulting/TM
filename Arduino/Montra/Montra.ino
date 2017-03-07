@@ -22,6 +22,10 @@
 #define relay_0 16
 #define relay_1 17
 
+#define NOUTPUTS 10
+static int saida_state_pin[NOUTPUTS] = { 49, 47, 45, 43, 41, 39, 37, 35, 33, 31 };
+static bool saida_state[NOUTPUTS] = { false, false, false, false, false, false, false, false, false, false };
+static unsigned long sm_timer_lampada[3] = {millis(), millis(), millis()};
 
 #define STEPS_PER_REV 1920
 #define MAX_SPEED_PER_REV 400 //value in millis 
@@ -135,7 +139,13 @@ void setup()
   pinMode(relay_0, OUTPUT);
   pinMode(relay_1, OUTPUT);
 
-
+  for (int i=0; i<NOUTPUTS; i++)
+  {
+    //Serial.println(saida_state_pin[i]);
+    
+    pinMode(saida_state_pin[i], OUTPUT);
+    digitalWrite(saida_state_pin[i], 1);
+  }
 }
 
 //Function that will be associated with the encoder interrupts (Relogio)
@@ -514,6 +524,50 @@ void ampulheta_state_machine()
   }
 }
 
+void control_rele(int rele, bool state)
+{
+  int i = 0;
+  for(i=0; i< NOUTPUTS; i++)
+  {
+    if(saida_state_pin[i] == rele)
+    {
+      break;
+    }
+  }
+  
+  if(state == true)
+  {
+    digitalWrite(rele, 0);
+    saida_state[i] = state;
+  }
+  else
+  {
+    digitalWrite(rele, 1);
+    saida_state[i] = state;
+  }
+}
+
+void reset_reles()
+{
+  control_rele(saida_state_pin[0], false);
+  control_rele(saida_state_pin[1], false);
+  control_rele(saida_state_pin[2], false);
+  control_rele(saida_state_pin[3], false);
+  control_rele(saida_state_pin[4], false);
+  control_rele(saida_state_pin[5], false);
+  control_rele(saida_state_pin[6], false);
+  control_rele(saida_state_pin[7], false);
+  control_rele(saida_state_pin[8], false);
+  control_rele(saida_state_pin[9], false);
+}
+
+void reset_lampadas_timer()
+{
+  sm_timer_lampada[0] = millis() + 500;
+  sm_timer_lampada[1] = millis() + 1000;
+  sm_timer_lampada[2] = millis() + 1500;
+}
+
 void motor_statemachine()
 {
   switch(sm_motor[MOTOR_RELOGIO])
@@ -527,6 +581,8 @@ void motor_statemachine()
     case WAITING_NEW_YEAR:
       if(last_year_received != year_received)
       {       
+        reset_lampadas_timer();
+        
         switch(year_received)
         {
            case 1910:
@@ -541,6 +597,18 @@ void motor_statemachine()
           case 1940:
             set_position(_1940_POS, MOTOR_RELOGIO);
             break;
+          case 1950:
+            set_position(_1950_POS, MOTOR_RELOGIO);
+            break;
+          case 1960:
+            set_position(_1960_POS, MOTOR_RELOGIO);
+            break;            
+          case 1970:
+            set_position(_1970_POS, MOTOR_RELOGIO);
+            break;
+          case 1980:
+            set_position(_1980_POS, MOTOR_RELOGIO);
+            break;            
           default:
             goto label_year_undefined;
             break;
@@ -561,6 +629,8 @@ label_year_undefined:
         Serial.print('r');
         send_new_year(last_year_received);
         sm_motor[MOTOR_RELOGIO] = SET_LEVERS_FORWARD;
+
+        reset_reles();
       }
       break;
     case SET_LEVERS_FORWARD:
@@ -587,6 +657,29 @@ label_year_undefined:
   }
 }
 
+void caixa_statemachine()
+{
+  if(sm_motor[MOTOR_RELOGIO] == WAITING_TO_REACH)
+  {
+    if(!desired_position_reached[MOTOR_RELOGIO])
+    {         
+      if(sm_timer_lampada[0] < millis())
+        control_rele(saida_state_pin[0], true);
+      if(sm_timer_lampada[1] < millis())
+        control_rele(saida_state_pin[1], true);
+      if(sm_timer_lampada[2] < millis())
+        control_rele(saida_state_pin[2], true);
+      control_rele(saida_state_pin[3], true);
+
+      control_rele(saida_state_pin[4], true);
+      control_rele(saida_state_pin[5], true);
+      control_rele(saida_state_pin[6], true);
+      control_rele(saida_state_pin[7], true);
+      control_rele(saida_state_pin[8], true);
+      control_rele(saida_state_pin[9], true);
+    }
+  }
+}
 
 void check_onoff_switch()
 {
@@ -655,6 +748,7 @@ void loop()
   
     motor_statemachine();
     ampulheta_state_machine();
+    caixa_statemachine();
   }
 }
 
