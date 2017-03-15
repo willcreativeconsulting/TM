@@ -23,7 +23,7 @@
 #define relay_1 17
 
 #define NOUTPUTS 10
-static int saida_state_pin[NOUTPUTS] = { 49, 47, 45, 43, 41, 39, 37, 35, 33, 31 };
+static int saida_state_pin[NOUTPUTS] = { 43, 47, 45, 49, 41, 39, 37, 35, 33, 31 };
 static bool saida_state[NOUTPUTS] = { false, false, false, false, false, false, false, false, false, false };
 static unsigned long sm_timer_lampada[3] = {millis(), millis(), millis()};
 
@@ -32,7 +32,7 @@ static unsigned long sm_timer_lampada[3] = {millis(), millis(), millis()};
 #define TIME_CONSTANT 100
 
 #define POS_TOLERANCE 10
-#define AMPULHETA_STOPTIME_SECONDS 5
+#define AMPULHETA_STOPTIME_SECONDS 30
 
 static long  enc_count[2]         = {0,0};
 static float rev_sec[2]           = {0,0};
@@ -47,10 +47,15 @@ static unsigned long prev_time[2] = {0,0};
 
 static int prev_state[2] = {0,0};
 
-#define K_P 0.5
-#define K_I 0.1
-#define K_D 0.5
-#define K_PWM 95  // 255/max_speed 
+#define K_PA 2  //2.4
+#define K_IA 0.5  //0.7 
+#define K_DA 0.2  //0.2
+#define K_PWMA 100  //100
+
+#define K_P 0.1  //0.5
+#define K_I 0.1  //0.1
+#define K_D 0.5  //0.5
+#define K_PWM 95  //95 255/max_speed 
 
 static float error_i[2]       = {0,0};
 static float prev_error_p[2]  = {0,0};
@@ -98,7 +103,7 @@ enum states
 #define SERVO_1   0
 #define SERVO_2   1
 
-static enum states sm_motor[2] = {START, START};
+static enum states sm_motor[2] = {START, AMPULHETA_0};
 static unsigned long sm_timer[2] = {millis(), millis()};
 
 void setup() 
@@ -323,7 +328,7 @@ void position_controller(int id)
 void speed_controller(int id)
 {
   float error_p = 0;
-  float error_d = 0; //AC: to chek if should not be statical
+  float error_d = 0;
   int pwm = 0;
 
   error_p = desired_speed[id] - rev_sec[id];
@@ -332,7 +337,20 @@ void speed_controller(int id)
   error_d+= error_p - prev_error_p[id];
   prev_error_p[id] = error_p;
 
-  pwm = (int)((desired_speed[id] + error_p * K_P + error_i[id] * K_I + error_d * K_D )*K_PWM);
+  float KP = K_P;
+  float KI = K_I;
+  float KD = K_D;
+  float KPWM = K_PWM;
+
+  if(id == MOTOR_AMPULHETA)
+  {
+    KP = K_PA;
+    KI = K_IA;
+    KD = K_DA;
+    KPWM = K_PWMA;
+  }
+
+  pwm = (int)((desired_speed[id] + error_p * KP + error_i[id] * KI + error_d * KD )*KPWM);
   if(pwm > 255)
     pwm = 255;
   if(pwm < -255)
@@ -499,11 +517,11 @@ void ampulheta_state_machine()
   switch(sm_motor[MOTOR_AMPULHETA])
   {
     case START:
-      if(calibrate_position_zero_motor(MOTOR_AMPULHETA))
-      {
+      //if(calibrate_position_zero_motor(MOTOR_AMPULHETA))
+      //{
         sm_motor[MOTOR_AMPULHETA] = AMPULHETA_180;
         sm_timer[MOTOR_AMPULHETA] = millis() + (1000*AMPULHETA_STOPTIME_SECONDS);
-      }
+      //}
       break;
     case AMPULHETA_180:
       if(sm_timer[MOTOR_AMPULHETA] < millis())
@@ -516,7 +534,7 @@ void ampulheta_state_machine()
     case AMPULHETA_0:
       if(sm_timer[MOTOR_AMPULHETA] < millis())
       {
-        set_position(AMPULHETA_0, MOTOR_AMPULHETA);
+        set_position(AMPULHETA_LOW, MOTOR_AMPULHETA);
         sm_motor[MOTOR_AMPULHETA] = AMPULHETA_180;
         sm_timer[MOTOR_AMPULHETA] = millis() + (1000*AMPULHETA_STOPTIME_SECONDS);
       }
@@ -669,8 +687,8 @@ void caixa_statemachine()
         control_rele(saida_state_pin[1], true);
       if(sm_timer_lampada[2] < millis())
         control_rele(saida_state_pin[2], true);
+        
       control_rele(saida_state_pin[3], true);
-
       control_rele(saida_state_pin[4], true);
       control_rele(saida_state_pin[5], true);
       control_rele(saida_state_pin[6], true);
