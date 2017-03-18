@@ -47,12 +47,12 @@ static unsigned long prev_time[2] = {0,0};
 
 static int prev_state[2] = {0,0};
 
-#define K_PA 2  //2.4
+#define K_PA 1  //2.4
 #define K_IA 0.5  //0.7 
 #define K_DA 0.2  //0.2
 #define K_PWMA 100  //100
 
-#define K_P 0.1  //0.5
+#define K_P 0.5  //0.5
 #define K_I 0.1  //0.1
 #define K_D 0.5  //0.5
 #define K_PWM 95  //95 255/max_speed 
@@ -85,14 +85,18 @@ enum states
   AMPULHETA_180,
 };
 
-#define _1910_POS   36
-#define _1920_POS   36*2
-#define _1930_POS   36*3
-#define _1940_POS   36*4
-#define _1950_POS   36*5
-#define _1960_POS   36*6
-#define _1970_POS   36*7
-#define _1980_POS   36*8
+#define offset 24
+#define offset_amp 0
+
+#define _1927_POS   26*13 + offset
+#define _1928_POS   26*13 + offset
+#define _1967_POS   26*12 + offset
+#define _1970_POS   26*9 + offset
+#define _1980_POS   26*7 + offset
+#define _1995_POS   26*4 + offset
+#define _1998_POS   26*4 + offset
+#define _2013_POS   26*2 + offset
+#define _2017_POS   26*1 + offset
 
 #define AMPULHETA_HIGH  0
 #define AMPULHETA_LOW   180
@@ -103,7 +107,7 @@ enum states
 #define SERVO_1   0
 #define SERVO_2   1
 
-static enum states sm_motor[2] = {START, AMPULHETA_0};
+static enum states sm_motor[2] = {START, START};
 static unsigned long sm_timer[2] = {millis(), millis()};
 
 void setup() 
@@ -311,11 +315,17 @@ void position_controller(int id)
     //not on the correct position
     if(deg_position[id] < low_limit)
     {
-      set_speed(0.2, id);
+      if(id == MOTOR_RELOGIO)
+        set_speed(0.1, id);
+      else
+        set_speed(0.1, id);
     } 
     else 
     {
-      set_speed(-0.2, id);
+      if(id == MOTOR_RELOGIO)
+        set_speed(-0.1, id);
+      else
+        set_speed(-0.1, id);
     }
   } 
   else 
@@ -517,11 +527,16 @@ void ampulheta_state_machine()
   switch(sm_motor[MOTOR_AMPULHETA])
   {
     case START:
-      //if(calibrate_position_zero_motor(MOTOR_AMPULHETA))
-      //{
+      if(calibrate_position_zero_motor(MOTOR_AMPULHETA))
+      {
+        if(offset_amp != 0)
+        {
+          set_position(offset_amp, MOTOR_AMPULHETA);
+        }
+        
         sm_motor[MOTOR_AMPULHETA] = AMPULHETA_180;
         sm_timer[MOTOR_AMPULHETA] = millis() + (1000*AMPULHETA_STOPTIME_SECONDS);
-      //}
+      }
       break;
     case AMPULHETA_180:
       if(sm_timer[MOTOR_AMPULHETA] < millis())
@@ -593,40 +608,65 @@ void motor_statemachine()
     case START:
       if(calibrate_position_zero_motor(MOTOR_RELOGIO))
       {
+        if(offset != 0)
+        {
+          set_position(offset, MOTOR_RELOGIO);
+        }
         sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
       }
       break;
     case WAITING_NEW_YEAR:
       if(last_year_received != year_received)
-      {       
+      {
         reset_lampadas_timer();
         
         switch(year_received)
         {
-           case 1910:
-            set_position(_1910_POS, MOTOR_RELOGIO);
+           case 1927:
+            set_position(_1927_POS, MOTOR_RELOGIO);
             break;
-          case 1920:
-            set_position(_1920_POS, MOTOR_RELOGIO);
+          case 1928:
+            set_position(_1928_POS, MOTOR_RELOGIO);
             break;
-          case 1930:
-            set_position(_1930_POS, MOTOR_RELOGIO);
+          case 1967:
+            set_position(_1967_POS, MOTOR_RELOGIO);
             break;
-          case 1940:
-            set_position(_1940_POS, MOTOR_RELOGIO);
-            break;
-          case 1950:
-            set_position(_1950_POS, MOTOR_RELOGIO);
-            break;
-          case 1960:
-            set_position(_1960_POS, MOTOR_RELOGIO);
-            break;            
+          case 1968:
+            set_position(_1967_POS, MOTOR_RELOGIO);
+            break;  
           case 1970:
+            set_position(_1970_POS, MOTOR_RELOGIO);
+            break;
+          case 1971:
             set_position(_1970_POS, MOTOR_RELOGIO);
             break;
           case 1980:
             set_position(_1980_POS, MOTOR_RELOGIO);
-            break;            
+            break;
+          case 1981:
+            set_position(_1980_POS, MOTOR_RELOGIO);
+            break;  
+          case 1995:
+            set_position(_1995_POS, MOTOR_RELOGIO);
+            break;    
+          case 1996:
+            set_position(_1995_POS, MOTOR_RELOGIO);
+            break;         
+          case 1998:
+            set_position(_1998_POS, MOTOR_RELOGIO);
+            break;
+          case 1999:
+            set_position(_1998_POS, MOTOR_RELOGIO);
+            break;
+          case 2013:
+            set_position(_2013_POS, MOTOR_RELOGIO);
+            break;
+          case 2014:
+            set_position(_2013_POS, MOTOR_RELOGIO);
+            break;    
+          case 2017:
+            set_position(_2017_POS, MOTOR_RELOGIO);
+            break;          
           default:
             goto label_year_undefined;
             break;
@@ -635,6 +675,17 @@ void motor_statemachine()
         send_new_year(9999);
         last_year_received = year_received;
         sm_timer[MOTOR_RELOGIO] = millis() + 100;
+
+        if( last_year_received == 1996 ||
+            last_year_received == 2014 ||
+            last_year_received == 1981 ||
+            last_year_received == 1971 ||
+            last_year_received == 1999 ||
+            last_year_received == 1968)
+        {
+          sm_timer[MOTOR_RELOGIO] = millis() + 20000;
+        }
+        
         sm_motor[MOTOR_RELOGIO] = WAITING_TO_REACH;
 
 label_year_undefined:
@@ -643,10 +694,88 @@ label_year_undefined:
       break;
     case WAITING_TO_REACH:
       if(desired_position_reached[MOTOR_RELOGIO] && sm_timer[MOTOR_RELOGIO] < millis())
-      {
-        Serial.print('r');
-        send_new_year(last_year_received);
-        sm_motor[MOTOR_RELOGIO] = SET_LEVERS_FORWARD;
+      {      
+        if(last_year_received == 1927 ||
+            last_year_received == 1995 ||
+            last_year_received == 2013 ||
+            last_year_received == 1980 ||
+            last_year_received == 1970 ||
+            last_year_received == 1998 ||
+            last_year_received == 1967 ||
+            last_year_received == 1928)
+        {
+          Serial.println('r');
+        }
+        
+        if(last_year_received == 1928)
+        {
+          send_new_year(1927);
+        }
+        else
+        {
+          send_new_year(last_year_received);
+        }
+
+        if(last_year_received == 1928)
+        {
+          if(sm_timer[MOTOR_RELOGIO] < millis())
+          {
+            year_received = 1968;
+            sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
+          }        
+        }
+        else if(last_year_received == 1968)
+        {
+          if(sm_timer[MOTOR_RELOGIO] < millis())
+          {
+            year_received = 1971;
+            sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
+          }         
+        }
+        else if(last_year_received == 1971)
+        {
+          if(sm_timer[MOTOR_RELOGIO] < millis())
+          {
+            year_received = 1981;
+            sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
+          }      
+        }
+        else if(last_year_received == 1981)
+        {
+          if(sm_timer[MOTOR_RELOGIO] < millis())
+          {
+            year_received = 1996;
+            sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
+          }      
+        }
+        else if(last_year_received == 1996)
+        {
+          if(sm_timer[MOTOR_RELOGIO] < millis())
+          {
+            year_received = 1999;
+            sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
+          }      
+        }
+        else if(last_year_received == 1999)
+        {
+          if(sm_timer[MOTOR_RELOGIO] < millis())
+          {
+            year_received = 2014;
+            sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
+          }      
+        }
+        else if(last_year_received == 2014)
+        {
+          if(sm_timer[MOTOR_RELOGIO] < millis())
+          {
+            year_received = 2017;
+            sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
+          }      
+        }
+        else
+        {
+          sm_motor[MOTOR_RELOGIO] = SET_LEVERS_FORWARD;
+        }
 
         reset_reles();
       }
@@ -758,7 +887,7 @@ void loop()
   {
     update_motor(MOTOR_RELOGIO);
     update_motor(MOTOR_AMPULHETA);
-    
+   
     update_lever(MOTOR_RELOGIO);
     update_lever(MOTOR_AMPULHETA);
     
@@ -794,5 +923,4 @@ void serialEvent()
     Serial.print('r');
   }
 }
-
 
