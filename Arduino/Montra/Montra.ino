@@ -69,13 +69,17 @@ static bool lever_working[2]  = {false, false};
 
 static int year_received      = 0;
 static int last_year_received = 0;
+static int last_year_received_pause = 0;
 
 #define BUFFER_SIZE 6
 static char rx_buffer[BUFFER_SIZE];
 
 enum states 
 { 
+  HALT,
   START,
+  PAUSE,
+  SHUTDOWN,
   WAITING_NEW_YEAR,
   WAITING_TO_REACH,
   SET_LEVERS_FORWARD,
@@ -85,16 +89,16 @@ enum states
   AMPULHETA_180,
 };
 
-#define offset 24
+#define offset 0
 #define offset_amp 0
 
 #define _1927_POS   26*13 + offset
 #define _1928_POS   26*13 + offset
-#define _1967_POS   26*12 + offset
+#define _1967_POS   26*10 + offset
 #define _1970_POS   26*9 + offset
 #define _1980_POS   26*7 + offset
 #define _1995_POS   26*4 + offset
-#define _1998_POS   26*4 + offset
+#define _1998_POS   26*3 -7 + offset
 #define _2013_POS   26*2 + offset
 #define _2017_POS   26*1 + offset
 
@@ -107,8 +111,9 @@ enum states
 #define SERVO_1   0
 #define SERVO_2   1
 
-static enum states sm_motor[2] = {START, START};
+static enum states sm_motor[2] = {HALT, HALT};
 static unsigned long sm_timer[2] = {millis(), millis()};
+static unsigned long sm_timer_pause = millis();
 
 void setup() 
 {
@@ -305,6 +310,8 @@ void position_controller(int id)
   /*
   Serial.print(" low_limit");
   Serial.print((float) low_limit);
+  Serial.print(" pos");
+  Serial.print((float) deg_position[id]);
   Serial.print(" high_limit");
   Serial.println((float) high_limit);
   */
@@ -526,14 +533,15 @@ void ampulheta_state_machine()
 {
   switch(sm_motor[MOTOR_AMPULHETA])
   {
+    case HALT:
+      break;
     case START:
       if(calibrate_position_zero_motor(MOTOR_AMPULHETA))
       {
         if(offset_amp != 0)
         {
           set_position(offset_amp, MOTOR_AMPULHETA);
-        }
-        
+        }  
         sm_motor[MOTOR_AMPULHETA] = AMPULHETA_180;
         sm_timer[MOTOR_AMPULHETA] = millis() + (1000*AMPULHETA_STOPTIME_SECONDS);
       }
@@ -545,7 +553,7 @@ void ampulheta_state_machine()
         sm_motor[MOTOR_AMPULHETA] = AMPULHETA_0;
         sm_timer[MOTOR_AMPULHETA] = millis() + (1000*AMPULHETA_STOPTIME_SECONDS);
       }
-    break;
+      break;
     case AMPULHETA_0:
       if(sm_timer[MOTOR_AMPULHETA] < millis())
       {
@@ -553,7 +561,10 @@ void ampulheta_state_machine()
         sm_motor[MOTOR_AMPULHETA] = AMPULHETA_180;
         sm_timer[MOTOR_AMPULHETA] = millis() + (1000*AMPULHETA_STOPTIME_SECONDS);
       }
-    break;
+      break;
+    case SHUTDOWN:
+      sm_motor[MOTOR_AMPULHETA] = HALT;
+      break;
   }
 }
 
@@ -624,42 +635,50 @@ void motor_statemachine()
         {
            case 1927:
             set_position(_1927_POS, MOTOR_RELOGIO);
+            send_new_year(9999);
             break;
           case 1928:
             set_position(_1928_POS, MOTOR_RELOGIO);
+            send_new_year(9999);
             break;
           case 1967:
             set_position(_1967_POS, MOTOR_RELOGIO);
+            send_new_year(9999);
             break;
           case 1968:
             set_position(_1967_POS, MOTOR_RELOGIO);
             break;  
           case 1970:
             set_position(_1970_POS, MOTOR_RELOGIO);
+            send_new_year(9999);
             break;
           case 1971:
             set_position(_1970_POS, MOTOR_RELOGIO);
             break;
           case 1980:
             set_position(_1980_POS, MOTOR_RELOGIO);
+            send_new_year(9999);
             break;
           case 1981:
             set_position(_1980_POS, MOTOR_RELOGIO);
             break;  
           case 1995:
             set_position(_1995_POS, MOTOR_RELOGIO);
+            send_new_year(9999);
             break;    
           case 1996:
             set_position(_1995_POS, MOTOR_RELOGIO);
             break;         
           case 1998:
             set_position(_1998_POS, MOTOR_RELOGIO);
+            send_new_year(9999);
             break;
           case 1999:
             set_position(_1998_POS, MOTOR_RELOGIO);
             break;
           case 2013:
             set_position(_2013_POS, MOTOR_RELOGIO);
+            send_new_year(9999);
             break;
           case 2014:
             set_position(_2013_POS, MOTOR_RELOGIO);
@@ -672,7 +691,7 @@ void motor_statemachine()
             break;
         }
         
-        send_new_year(9999);
+        //send_new_year(9999);
         last_year_received = year_received;
         sm_timer[MOTOR_RELOGIO] = millis() + 100;
 
@@ -683,97 +702,97 @@ void motor_statemachine()
             last_year_received == 1999 ||
             last_year_received == 1968)
         {
-          sm_timer[MOTOR_RELOGIO] = millis() + 20000;
+          sm_timer_pause = millis() + 18000;
+          sm_motor[MOTOR_RELOGIO] = PAUSE;          
         }
-        
-        sm_motor[MOTOR_RELOGIO] = WAITING_TO_REACH;
-
+        else
+        {
+          sm_motor[MOTOR_RELOGIO] = WAITING_TO_REACH;
+        }
 label_year_undefined:
         int a=0; //dummy label
       }
       break;
+    case PAUSE:
+      if(desired_position_reached[MOTOR_RELOGIO] && sm_timer[MOTOR_RELOGIO] < millis() && (last_year_received_pause != last_year_received))
+      {
+        if(last_year_received == 1968)
+        {
+          send_new_year(1967);
+        }
+        else if(last_year_received == 1971)
+        {
+          send_new_year(1970);
+        }
+        else if(last_year_received == 1981)
+        {
+          send_new_year(1980);
+        }
+        else if(last_year_received == 1996)
+        {
+          send_new_year(1995);
+        }
+        else if(last_year_received == 1999)
+        {
+          send_new_year(1998);
+        }
+        else if(last_year_received == 2014)
+        {
+          send_new_year(2017);
+        }
+
+        last_year_received_pause = last_year_received;
+      }
+
+      if(sm_timer_pause < millis())
+      {
+        if(last_year_received == 1968)
+        {
+          year_received = 1971;
+        }
+        else if(last_year_received == 1971)
+        {
+          year_received = 1981;
+        }
+        else if(last_year_received == 1981)
+        {
+          year_received = 1996;
+        }
+        else if(last_year_received == 1996)
+        {
+          year_received = 1999;
+        }
+        else if(last_year_received == 1999)
+        {
+          year_received = 2014;
+        }
+        else if(last_year_received == 2014)
+        {
+          year_received = 2017;
+        }
+        else
+        {
+          //
+        }
+        
+        sm_motor[MOTOR_RELOGIO] = SET_LEVERS_FORWARD;
+      }
+      
+      break;
     case WAITING_TO_REACH:
       if(desired_position_reached[MOTOR_RELOGIO] && sm_timer[MOTOR_RELOGIO] < millis())
       {      
-        if(last_year_received == 1927 ||
-            last_year_received == 1995 ||
-            last_year_received == 2013 ||
-            last_year_received == 1980 ||
-            last_year_received == 1970 ||
-            last_year_received == 1998 ||
-            last_year_received == 1967 ||
-            last_year_received == 1928)
-        {
-          Serial.println('r');
-        }
+        Serial.println('r');
         
         if(last_year_received == 1928)
         {
           send_new_year(1927);
+          year_received = 1968;
+          sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
         }
         else
         {
           send_new_year(last_year_received);
-        }
-
-        if(last_year_received == 1928)
-        {
-          if(sm_timer[MOTOR_RELOGIO] < millis())
-          {
-            year_received = 1968;
-            sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
-          }        
-        }
-        else if(last_year_received == 1968)
-        {
-          if(sm_timer[MOTOR_RELOGIO] < millis())
-          {
-            year_received = 1971;
-            sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
-          }         
-        }
-        else if(last_year_received == 1971)
-        {
-          if(sm_timer[MOTOR_RELOGIO] < millis())
-          {
-            year_received = 1981;
-            sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
-          }      
-        }
-        else if(last_year_received == 1981)
-        {
-          if(sm_timer[MOTOR_RELOGIO] < millis())
-          {
-            year_received = 1996;
-            sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
-          }      
-        }
-        else if(last_year_received == 1996)
-        {
-          if(sm_timer[MOTOR_RELOGIO] < millis())
-          {
-            year_received = 1999;
-            sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
-          }      
-        }
-        else if(last_year_received == 1999)
-        {
-          if(sm_timer[MOTOR_RELOGIO] < millis())
-          {
-            year_received = 2014;
-            sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
-          }      
-        }
-        else if(last_year_received == 2014)
-        {
-          if(sm_timer[MOTOR_RELOGIO] < millis())
-          {
-            year_received = 2017;
-            sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
-          }      
-        }
-        else
-        {
           sm_motor[MOTOR_RELOGIO] = SET_LEVERS_FORWARD;
         }
 
@@ -799,6 +818,17 @@ label_year_undefined:
       if(sm_timer[MOTOR_RELOGIO] < millis())
       {
         sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
+      }
+      break;
+    case SHUTDOWN:
+      if(sm_timer[MOTOR_RELOGIO] < millis())
+      {
+        //Serial.print("RELAY OFF");
+        
+        digitalWrite(relay_0,1);    
+        send_new_year(0);
+
+        sm_motor[MOTOR_RELOGIO] = HALT;
       }
       break;
   }
@@ -828,35 +858,42 @@ void caixa_statemachine()
   }
 }
 
-void check_onoff_switch()
+bool check_onoff_switch()
 {
-  static bool prev_state = false;
-  static unsigned long prev_timer = millis();  
-  int i=0;
+  bool bRet = true;
+  
+  if(!digitalRead(main_switch))
+  {    
+    digitalWrite(relay_0,0);
+    digitalWrite(motor_enable,1);
+    digitalWrite(motor_enable_ampulheta,1);     
 
-  if(prev_state != digitalRead(main_switch))
-  {
-    prev_state = digitalRead(main_switch);
-    if(!digitalRead(main_switch))
+    for(int i=0; i<2 ;i++)
     {
-      digitalWrite(relay_0,0);
-      digitalWrite(motor_enable,1);
-      digitalWrite(motor_enable_ampulheta,1);     
-    } 
-    else
+      if((sm_motor[i] == SHUTDOWN) || ((sm_motor[i] == HALT)))
+      {
+        //Serial.print("ON");
+        sm_motor[i] = START;
+      }
+    }
+  } 
+  else
+  {   
+    if(sm_motor[MOTOR_RELOGIO] != SHUTDOWN)
     {
-      prev_timer = millis() + 10000;
-      
+      //Serial.print("SHUTDOWN");
+        
       digitalWrite(motor_enable,0);
       digitalWrite(motor_enable_ampulheta,0);
-
-      for(i = 0; i<2;i++)
+  
+      for(int i=0; i<2 ;i++)
       {
         //Reset the state machines
-        enc_count[i] = 0;
+        enc_count[i]      = 0;
         prev_enc_count[i] = 0;
-        sm_motor[i] = START;
-
+        sm_motor[i]       = SHUTDOWN;
+        sm_timer[i]       = millis() + 10000;
+  
         //Send the shutdown signal to the raspberry
         Serial.print("X");
         Serial.print("X");
@@ -865,38 +902,31 @@ void check_onoff_switch()
         Serial.print("X");     
       }
     }
+    
+    bRet = false;
   }
-  
-  if(digitalRead(main_switch))
-  {
-    if(prev_timer < millis())
-    {
-      digitalWrite(relay_0,1);    
-      send_new_year(0);
-    }  
-  }
+
+  return bRet;
 }
 
 void loop() 
 { 
   // put your main code here, to run repeatedly:
   
-  check_onoff_switch();
- 
-  if(!digitalRead(main_switch))
+  if(check_onoff_switch())
   {
     update_motor(MOTOR_RELOGIO);
     update_motor(MOTOR_AMPULHETA);
-   
+    
     update_lever(MOTOR_RELOGIO);
     update_lever(MOTOR_AMPULHETA);
     
     process_serial();
+  }  
   
-    motor_statemachine();
-    ampulheta_state_machine();
-    caixa_statemachine();
-  }
+  motor_statemachine();
+  ampulheta_state_machine();
+  caixa_statemachine();
 }
 
 
