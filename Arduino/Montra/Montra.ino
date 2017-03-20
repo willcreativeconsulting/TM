@@ -28,6 +28,8 @@ static bool saida_state[NOUTPUTS] = { false, false, false, false, false, false, 
 static unsigned long sm_timer_lampada[3] = {millis(), millis(), millis()};
 
 #define STEPS_PER_REV 1920
+#define STEPS_PER_REV_AMP 6533
+
 #define MAX_SPEED_PER_REV 400 //value in millis 
 #define TIME_CONSTANT 100
 
@@ -47,8 +49,10 @@ static unsigned long prev_time[2] = {0,0};
 
 static int prev_state[2] = {0,0};
 
-#define K_PA 1  //2.4
-#define K_IA 0.5  //0.7 
+static int prev_value = 9999;
+
+#define K_PA 0.5  //1.5
+#define K_IA 1  //1 
 #define K_DA 0.2  //0.2
 #define K_PWMA 100  //100
 
@@ -71,6 +75,7 @@ static int year_received      = 0;
 static int last_year_received = 0;
 
 int timer_count = 0;
+int timer_count_amp = 0;
 
 #define BUFFER_SIZE 6
 static char rx_buffer[BUFFER_SIZE];
@@ -100,7 +105,7 @@ enum states
 #define _1970_POS   26*9 + offset
 #define _1980_POS   26*7 + offset
 #define _1995_POS   26*4 + offset
-#define _1998_POS   26*3 -7 + offset
+#define _1998_POS   26*3 +7 + offset
 #define _2013_POS   26*2 + offset
 #define _2017_POS   26*1 + offset
 
@@ -327,14 +332,14 @@ void position_controller(int id)
       if(id == MOTOR_RELOGIO)
         set_speed(0.1, id);
       else
-        set_speed(0.1, id);
+        set_speed(0.05, id);
     } 
     else 
     {
       if(id == MOTOR_RELOGIO)
         set_speed(-0.1, id);
       else
-        set_speed(-0.1, id);
+        set_speed(-0.05, id);
     }
   } 
   else 
@@ -442,7 +447,14 @@ void update_motor(int id)
     
     //expected steps per second
     enc_steps*=(1000/TIME_CONSTANT);
-    rev_sec[id] = (float) (enc_steps*1.1/(STEPS_PER_REV*1.1));
+
+    int steps_rev = STEPS_PER_REV;
+    if(id == MOTOR_AMPULHETA)
+    {
+      steps_rev = STEPS_PER_REV_AMP;
+    }
+    
+    rev_sec[id] = (float) (enc_steps*1.1/(steps_rev*1.1));
 
     /*   
     Serial.print(" enc_steps:");
@@ -455,7 +467,7 @@ void update_motor(int id)
     Serial.println((float)rev_sec[id]);
     // */    
     //deg_position[id] = ((float)((enc_count[id]*1.0)/(STEPS_PER_REV*1.0))- (int)(enc_count[id]/STEPS_PER_REV))*360;
-    deg_position[id] = ((float)((enc_count[id]*1.0)/(STEPS_PER_REV*1.0)))*360;
+    deg_position[id] = ((float)((enc_count[id]*1.0)/(steps_rev*1.0)))*360;
     
     /*Serial.print(" enc_count[%i]:", id);
     Serial.print((int)enc_count[id]);
@@ -493,7 +505,6 @@ void set_lever(int deg, int id)
 
 int process_serial()
 {
-  static int prev_value = 9999;
   int value = 0;
   char i = 0;
   char test_number = 0;
@@ -544,24 +555,43 @@ void ampulheta_state_machine()
         {
           set_position(offset_amp, MOTOR_AMPULHETA);
         }  
-        sm_motor[MOTOR_AMPULHETA] = AMPULHETA_180;
-        sm_timer[MOTOR_AMPULHETA] = millis() + (1000*AMPULHETA_STOPTIME_SECONDS);
+        sm_motor[MOTOR_AMPULHETA] = AMPULHETA_0;
+        sm_timer[MOTOR_AMPULHETA] = millis() + (100);
+        timer_count_amp = 1;
       }
       break;
     case AMPULHETA_180:
       if(sm_timer[MOTOR_AMPULHETA] < millis())
       {
-        set_position(AMPULHETA_HIGH, MOTOR_AMPULHETA);
-        sm_motor[MOTOR_AMPULHETA] = AMPULHETA_0;
-        sm_timer[MOTOR_AMPULHETA] = millis() + (1000*AMPULHETA_STOPTIME_SECONDS);
-      }
+        timer_count_amp = timer_count_amp + 1;
+        if(timer_count_amp > 1)
+        {
+          timer_count_amp = 0;
+          set_position(AMPULHETA_HIGH, MOTOR_AMPULHETA);
+          sm_motor[MOTOR_AMPULHETA] = AMPULHETA_0;
+          sm_timer[MOTOR_AMPULHETA] = millis() + (1000*AMPULHETA_STOPTIME_SECONDS);
+        }
+        else
+        {
+          sm_timer[MOTOR_AMPULHETA] = millis() + (1000*AMPULHETA_STOPTIME_SECONDS);
+        }
+      }     
       break;
     case AMPULHETA_0:
       if(sm_timer[MOTOR_AMPULHETA] < millis())
       {
-        set_position(AMPULHETA_LOW, MOTOR_AMPULHETA);
-        sm_motor[MOTOR_AMPULHETA] = AMPULHETA_180;
-        sm_timer[MOTOR_AMPULHETA] = millis() + (1000*AMPULHETA_STOPTIME_SECONDS);
+        timer_count_amp = timer_count_amp + 1;
+        if(timer_count_amp > 1)
+        {
+          timer_count_amp = 0;
+          set_position(AMPULHETA_LOW, MOTOR_AMPULHETA);
+          sm_motor[MOTOR_AMPULHETA] = AMPULHETA_180;
+          sm_timer[MOTOR_AMPULHETA] = millis() + (1000*AMPULHETA_STOPTIME_SECONDS);
+        }
+        else
+        {
+          sm_timer[MOTOR_AMPULHETA] = millis() + (1000*AMPULHETA_STOPTIME_SECONDS);
+        }
       }
       break;
     case SHUTDOWN:
@@ -631,8 +661,14 @@ void motor_statemachine()
       }
       break;
     case WAITING_NEW_YEAR:
+      /*Serial.print("last_year_received:");
+      Serial.println((int) last_year_received);
+      Serial.print("year_received:");
+      Serial.println((int) year_received)´*/
       if(last_year_received != year_received)
-      {        
+      {  
+        //Serial.println("last_year_received != year_received");
+                     
         reset_lampadas_timer();
         
         switch(year_received)
@@ -773,9 +809,11 @@ label_year_undefined:
         send_new_year(0);
 
         sm_motor[MOTOR_RELOGIO] = HALT;
-
-        last_year_received = 0;
-        year_received = 0;
+        
+        desired_position[MOTOR_RELOGIO] = 0;
+        desired_position[MOTOR_AMPULHETA] = 0;
+        deg_position[MOTOR_RELOGIO] = 0;
+        deg_position[MOTOR_AMPULHETA] = 0;
       }
       break;
   }
@@ -821,6 +859,14 @@ bool check_onoff_switch()
       {
         //Serial.print("ON");
         sm_motor[i] = START;
+
+        last_year_received = 0;
+        year_received = 0;
+        prev_value = 9999;
+        rx_buffer[0] = 0;
+        rx_buffer[1] = 0;
+        rx_buffer[2] = 0;
+        rx_buffer[3] = 0;
       }
     }
   } 
@@ -867,9 +913,9 @@ void loop()
     
     update_lever(MOTOR_RELOGIO);
     update_lever(MOTOR_AMPULHETA);
-    
+  
     process_serial();
-  }  
+  }
   
   motor_statemachine();
   ampulheta_state_machine();
