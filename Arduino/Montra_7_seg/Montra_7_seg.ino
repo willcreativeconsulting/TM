@@ -191,6 +191,16 @@ void set_7_segment_value(int value){
     return;
   }
 
+  if((value == 9998) || (value == 9997)){
+    //turn off the digits
+    digit_4 = 10;
+    digit_3 = 0;
+    digit_2 = 9;
+    digit_1 = 10;
+
+    return;
+  }
+
   if(value == 9999 && timer < millis()){
     
     timer = millis() + 100;

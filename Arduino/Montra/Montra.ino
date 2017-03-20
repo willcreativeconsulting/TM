@@ -69,7 +69,8 @@ static bool lever_working[2]  = {false, false};
 
 static int year_received      = 0;
 static int last_year_received = 0;
-static int last_year_received_pause = 0;
+
+int timer_count = 0;
 
 #define BUFFER_SIZE 6
 static char rx_buffer[BUFFER_SIZE];
@@ -79,6 +80,7 @@ enum states
   HALT,
   START,
   PAUSE,
+  PAUSE_,
   SHUTDOWN,
   WAITING_NEW_YEAR,
   WAITING_TO_REACH,
@@ -616,6 +618,8 @@ void motor_statemachine()
 {
   switch(sm_motor[MOTOR_RELOGIO])
   {
+    case HALT:
+      break;
     case START:
       if(calibrate_position_zero_motor(MOTOR_RELOGIO))
       {
@@ -628,7 +632,7 @@ void motor_statemachine()
       break;
     case WAITING_NEW_YEAR:
       if(last_year_received != year_received)
-      {
+      {        
         reset_lampadas_timer();
         
         switch(year_received)
@@ -639,52 +643,35 @@ void motor_statemachine()
             break;
           case 1928:
             set_position(_1928_POS, MOTOR_RELOGIO);
-            send_new_year(9999);
+            //send_new_year(9998);
             break;
           case 1967:
             set_position(_1967_POS, MOTOR_RELOGIO);
             send_new_year(9999);
             break;
-          case 1968:
-            set_position(_1967_POS, MOTOR_RELOGIO);
-            break;  
           case 1970:
             set_position(_1970_POS, MOTOR_RELOGIO);
             send_new_year(9999);
-            break;
-          case 1971:
-            set_position(_1970_POS, MOTOR_RELOGIO);
             break;
           case 1980:
             set_position(_1980_POS, MOTOR_RELOGIO);
             send_new_year(9999);
             break;
-          case 1981:
-            set_position(_1980_POS, MOTOR_RELOGIO);
-            break;  
           case 1995:
             set_position(_1995_POS, MOTOR_RELOGIO);
             send_new_year(9999);
             break;    
-          case 1996:
-            set_position(_1995_POS, MOTOR_RELOGIO);
-            break;         
           case 1998:
             set_position(_1998_POS, MOTOR_RELOGIO);
             send_new_year(9999);
-            break;
-          case 1999:
-            set_position(_1998_POS, MOTOR_RELOGIO);
             break;
           case 2013:
             set_position(_2013_POS, MOTOR_RELOGIO);
             send_new_year(9999);
             break;
-          case 2014:
-            set_position(_2013_POS, MOTOR_RELOGIO);
-            break;    
           case 2017:
             set_position(_2017_POS, MOTOR_RELOGIO);
+            //send_new_year(9999);
             break;          
           default:
             goto label_year_undefined;
@@ -695,14 +682,9 @@ void motor_statemachine()
         last_year_received = year_received;
         sm_timer[MOTOR_RELOGIO] = millis() + 100;
 
-        if( last_year_received == 1996 ||
-            last_year_received == 2014 ||
-            last_year_received == 1981 ||
-            last_year_received == 1971 ||
-            last_year_received == 1999 ||
-            last_year_received == 1968)
+        if( last_year_received == 1928 )
         {
-          sm_timer_pause = millis() + 18000;
+          sm_timer_pause = millis() + 100;
           sm_motor[MOTOR_RELOGIO] = PAUSE;          
         }
         else
@@ -714,80 +696,42 @@ label_year_undefined:
       }
       break;
     case PAUSE:
-      if(desired_position_reached[MOTOR_RELOGIO] && sm_timer[MOTOR_RELOGIO] < millis() && (last_year_received_pause != last_year_received))
+      if(desired_position_reached[MOTOR_RELOGIO] && sm_timer_pause < millis())
       {
-        if(last_year_received == 1968)
-        {
-          send_new_year(1967);
-        }
-        else if(last_year_received == 1971)
-        {
-          send_new_year(1970);
-        }
-        else if(last_year_received == 1981)
-        {
-          send_new_year(1980);
-        }
-        else if(last_year_received == 1996)
-        {
-          send_new_year(1995);
-        }
-        else if(last_year_received == 1999)
-        {
-          send_new_year(1998);
-        }
-        else if(last_year_received == 2014)
-        {
-          send_new_year(2017);
-        }
+        Serial.println('r');
 
-        last_year_received_pause = last_year_received;
+        timer_count = 0;
+        send_new_year(9998);        
+        sm_timer_pause = millis() + 1000;
+        sm_motor[MOTOR_RELOGIO] = PAUSE_;
       }
-
+      break;
+    case PAUSE_: 
       if(sm_timer_pause < millis())
       {
-        if(last_year_received == 1968)
-        {
-          year_received = 1971;
-        }
-        else if(last_year_received == 1971)
-        {
-          year_received = 1981;
-        }
-        else if(last_year_received == 1981)
-        {
-          year_received = 1996;
-        }
-        else if(last_year_received == 1996)
-        {
-          year_received = 1999;
-        }
-        else if(last_year_received == 1999)
-        {
-          year_received = 2014;
-        }
-        else if(last_year_received == 2014)
+        timer_count = timer_count + 1;
+        if(timer_count > 115)
         {
           year_received = 2017;
+          sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
         }
         else
         {
-          //
+          sm_timer_pause = millis() + 1000;
         }
-        
-        sm_motor[MOTOR_RELOGIO] = SET_LEVERS_FORWARD;
       }
-      
       break;
     case WAITING_TO_REACH:
       if(desired_position_reached[MOTOR_RELOGIO] && sm_timer[MOTOR_RELOGIO] < millis())
-      {      
-        Serial.println('r');
+      {
+        if(last_year_received != 2017)
+        {      
+          Serial.println('r');
+        }
         
-        if(last_year_received == 1928)
+        if(last_year_received == 2017)
         {
-          send_new_year(1927);
-          year_received = 1968;
+          send_new_year(9997);
           sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
         }
         else
@@ -829,6 +773,9 @@ label_year_undefined:
         send_new_year(0);
 
         sm_motor[MOTOR_RELOGIO] = HALT;
+
+        last_year_received = 0;
+        year_received = 0;
       }
       break;
   }
