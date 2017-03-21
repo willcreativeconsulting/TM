@@ -23,7 +23,7 @@
 #define relay_1 17
 
 #define NOUTPUTS 10
-static int saida_state_pin[NOUTPUTS] = { 43, 47, 45, 49, 41, 39, 37, 35, 33, 31 };
+static int saida_state_pin[NOUTPUTS] = { 45, 43, 47, 49, 41, 39, 37, 35, 33, 31 };
 static bool saida_state[NOUTPUTS] = { false, false, false, false, false, false, false, false, false, false };
 static unsigned long sm_timer_lampada[3] = {millis(), millis(), millis()};
 
@@ -51,9 +51,9 @@ static int prev_state[2] = {0,0};
 
 static int prev_value = 9999;
 
-#define K_PA 0.5  //1.5
-#define K_IA 1  //1 
-#define K_DA 0.2  //0.2
+#define K_PA 3  //1.5
+#define K_IA 1.2  //1 
+#define K_DA 0.5  //0.2
 #define K_PWMA 100  //100
 
 #define K_P 0.5  //0.5
@@ -332,14 +332,14 @@ void position_controller(int id)
       if(id == MOTOR_RELOGIO)
         set_speed(0.1, id);
       else
-        set_speed(0.05, id);
+        set_speed(0.08, id);
     } 
     else 
     {
       if(id == MOTOR_RELOGIO)
         set_speed(-0.1, id);
       else
-        set_speed(-0.05, id);
+        set_speed(-0.08, id);
     }
   } 
   else 
@@ -746,7 +746,7 @@ label_year_undefined:
       if(sm_timer_pause < millis())
       {
         timer_count = timer_count + 1;
-        if(timer_count > 115)
+        if(timer_count > 110)
         {
           year_received = 2017;
           sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
@@ -905,6 +905,8 @@ bool check_onoff_switch()
 void loop() 
 { 
   // put your main code here, to run repeatedly:
+  //control_rele(saida_state_pin[5], true);
+  //exit;
   
   if(check_onoff_switch())
   {

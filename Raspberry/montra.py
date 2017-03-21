@@ -3,6 +3,18 @@ from time import sleep
 import serial
 import os
 import subprocess
+import uinput
+import sys
+#import pymouse
+
+#subprocess.call(['sudo', 'modprobe','uinput'])
+
+#device = uinput.Device([
+#        uinput.BTN_LEFT,
+#        uinput.BTN_RIGHT,
+#        uinput.REL_X,
+#        uinput.REL_Y
+#        ])
 
 _1927 = '/home/pi/python/python-omxplayer-wrapper/videos_B2F/registo.mp4'
 _1995 = '/home/pi/python/python-omxplayer-wrapper/videos_B2F/SBSR.mp4'
@@ -74,7 +86,7 @@ def play_video(year):
 				myprocess.stdin.write('q')
 			if year == "1980":
 				myprocess = subprocess.Popen(['omxplayer','-b -z',_1980],stdin=subprocess.PIPE)
-				check_halt(20)
+				check_halt(22)
 				myprocess.stdin.write('q')
 			if year == "1970":
 				myprocess = subprocess.Popen(['omxplayer','-b -z',_1970],stdin=subprocess.PIPE)
@@ -82,15 +94,15 @@ def play_video(year):
 				myprocess.stdin.write('q')
 			if year == "1998":
 				myprocess = subprocess.Popen(['omxplayer','-b -z',_1998],stdin=subprocess.PIPE)
-				check_halt(30)
+				check_halt(32)
 				myprocess.stdin.write('q')
 			if year == "1967":
 				myprocess = subprocess.Popen(['omxplayer','-b -z',_1967],stdin=subprocess.PIPE)
-				check_halt(15)
+				check_halt(17)
 				myprocess.stdin.write('q')
 			if year == "1928":
 				myprocess = subprocess.Popen(['omxplayer','-b -z',_1928],stdin=subprocess.PIPE)
-				check_halt(130)
+				check_halt(132)
 				myprocess.stdin.write('q')
 		#else:
                         #print("sending again")
@@ -101,7 +113,14 @@ def play_video(year):
 		#sleep(5)
 	return
 
-		
+
+#move mouse to left buttom corner
+#device.emit(uinput.REL_X, 2000, syn=False)
+#device.emit(uinput.REL_Y, 2000)
+
+#m = pymouse.PyMouse()
+#m.move(700,700)
+
 while 1:
         ser.flush()
         myprocess_ = subprocess.Popen(['omxplayer','-b -z',_tempo1],stdin=subprocess.PIPE)
@@ -113,7 +132,7 @@ while 1:
         play_video("1995")
         ser.flush()
         myprocess_ = subprocess.Popen(['omxplayer','-b -z',_tempo3],stdin=subprocess.PIPE)
-        sleep(5)
+        sleep(9)
         play_video("2013")
         ser.flush()
         myprocess_ = subprocess.Popen(['omxplayer','-b -z',_tempo4],stdin=subprocess.PIPE)
