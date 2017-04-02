@@ -1,4 +1,3 @@
-//AC #include <SparkFunDS1307RTC.h>
 #include <Wire.h>
 
 #include <Servo.h>
@@ -41,6 +40,8 @@ static unsigned long sm_timer_lampada[3] = {millis(), millis(), millis()};
 #define POS_TOLERANCE 10
 #define AMPULHETA_STOPTIME_SECONDS 30
 
+#define MAX_WORK_TIME 12
+
 static long  enc_count[2]         = {0,0};
 static float rev_sec[2]           = {0,0};
 static float deg_position[2]      = {0,0};
@@ -60,13 +61,6 @@ static int prev_value = 9999;
 #define K_IA 1.2  //1 
 #define K_DA 0.5  //0.2
 #define K_PWMA 100  //100
-
-/*
-#define K_P 0.4  //0.5
-#define K_I 0.2  //0.1
-#define K_D 0.2  //0.5
-#define K_PWM 95  //95 255/max_speed 
-*/
 
 #define K_P 1.8  //0.5
 #define K_I 0.2  //0.1
@@ -157,8 +151,8 @@ void setup()
   attachInterrupt(digitalPinToInterrupt(enc_a), update_enc_relogio, CHANGE);
   attachInterrupt(digitalPinToInterrupt(enc_b), update_enc_relogio, CHANGE);
   
-  attachInterrupt(digitalPinToInterrupt(enc_c), update_enc_ampulheta, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(enc_d), update_enc_ampulheta, CHANGE);
+  //attachInterrupt(digitalPinToInterrupt(enc_c), update_enc_ampulheta, CHANGE);
+  //attachInterrupt(digitalPinToInterrupt(enc_d), update_enc_ampulheta, CHANGE);
   
   pinMode(out_a, OUTPUT);
   pinMode(out_b, OUTPUT); 
@@ -179,23 +173,6 @@ void setup()
     pinMode(saida_state_pin[i], OUTPUT);
     digitalWrite(saida_state_pin[i], 1);
   }
-//AC
-/*
-  control_rele(saida_state_pin[3], true);
-  control_rele(saida_state_pin[4], true);
-  control_rele(saida_state_pin[5], true);
-  control_rele(saida_state_pin[6], true);
-  control_rele(saida_state_pin[7], true);
-  control_rele(saida_state_pin[8], true);
-  control_rele(saida_state_pin[9], true);
-  delay(2000);
-
-
-  rtc.begin(); // Call rtc.begin() to initialize the library
-  rtc.setTime(01, 27, 00, 2, 31, 03, 17);  //rtc.setTime(second, minute, hour, day, date, month, year);
-  //rtc.set24Hour();
-  rtc.update();
-*/
 }
 
 //Function that will be associated with the encoder interrupts (Relogio)
@@ -872,108 +849,27 @@ void caixa_statemachine()
   }
 }
 
-//AC
-/*
-bool debounce_switch(){
-  static bool prev_state = true;
+bool debounce(){
   static bool state = false;
-  static unsigned long switch_timer = millis();
+  static unsigned long debounce_time = millis();
 
-  if(switch_timer < millis()){
-    state = prev_state;
-  }
-  if(digitalRead(main_switch) != prev_state){
-    switch_timer = millis()+100;
-  }
-
-  prev_state = digitalRead(main_switch);
   
-  
-  return state;
-}
-
-
-#define ON_HOUR 12
-#define OFF_HOUR 2
-#define FORCE_HOUR 14
-
-
-
-bool verify_working_time(){
-  //bool test = debounce_switch();
-  //return test;
-  
-  static bool button = false;
-  static bool state = false;
-  static int next_change = ON_HOUR;
-  static bool pass_24 = false;
-  static int hours = 0;
-
-  hours = rtc.hour();
-/*
-  static  unsigned long show_state = millis();
-
-  if(show_state < millis()){
-    show_state = millis()+1000;
-    Serial.print("hours:");
-    Serial.print(hours);
-    Serial.print(" button:");
-    Serial.print(button);
-    Serial.print(" state:");
-    Serial.print(state);
-    Serial.print(" next_change:");
-    Serial.println(next_change);
-    Serial.print(" pass_24:");
-    Serial.println(pass_24);
-    
+  if(state == digitalRead(main_switch)){
+    debounce_time = millis();
   }
-    
-  if(button == false && !debounce_switch()){
-    state = true;
-    
-    next_change = hours + FORCE_HOUR;
-    pass_24 = false;
-    if(next_change >= 24){
-      pass_24 = true;
-      next_change-=24;
-    }
-    button = true;  
-  }
-  if(debounce_switch()){
-    button = false;
-  }
-
-  if(button == true && hours>= next_change && !pass_24){
-    if(state){
-      state = false;
-      next_change = OFF_HOUR;      
-    } else {
-      next_change = ON_HOUR;
-      state = true;
-    }
-    if(next_change < hours){
-      pass_24 = true;
-    }
-  }
-
-  if(hours == 0){
-    pass_24 = false;
-  }
-  if(button == false){
-    state = false;
-    
+  if(debounce_time + 100 < millis()){
+    state = digitalRead(main_switch);
   }
 
   return state;
 }
-*/
 
 bool check_onoff_switch()
 {
   bool bRet = true;
   
-  //AC if(verify_working_time())
-  if(!digitalRead(main_switch))
+  //if( (!digitalRead(main_switch)) && (!check_max_time()) )
+  if(!debounce())
   {    
     digitalWrite(relay_0,0);
     digitalWrite(motor_enable,1);
@@ -998,7 +894,7 @@ bool check_onoff_switch()
   } 
   else
   {   
-    if(sm_motor[MOTOR_RELOGIO] != SHUTDOWN && sm_motor[MOTOR_RELOGIO] != HALT)
+    if(sm_motor[MOTOR_RELOGIO] != SHUTDOWN)
     {
       //Serial.print("SHUTDOWN");
         
@@ -1028,34 +924,13 @@ bool check_onoff_switch()
   return bRet;
 }
 
-//AC int hours = 0;  
+  
 void loop() 
 { 
-  //AC static unsigned long last_check = millis();
-  
-  // put your main code here, to run repeatedly:
-  //control_rele(saida_state_pin[5], true);
-  //exit;
-   /*
-  if(last_check + 1000 < millis()){
-    rtc.update();
-    hours = rtc.hour();
-    last_check = millis();
-    Serial.print(rtc.hour());
-    Serial.print(":");
-    Serial.print(rtc.minute());
-    Serial.print(":");
-    
-    Serial.println(rtc.second());
-  }
-  // */
-
-
-  //AC rtc.update();
   if(check_onoff_switch())
   {
     update_motor(MOTOR_RELOGIO);
-    update_motor(MOTOR_AMPULHETA);
+    //update_motor(MOTOR_AMPULHETA);
     
     update_lever(MOTOR_RELOGIO);
     update_lever(MOTOR_AMPULHETA);
@@ -1064,7 +939,7 @@ void loop()
   }
   
   motor_statemachine();
-  ampulheta_state_machine();
+  //ampulheta_state_machine();
   caixa_statemachine();
 }
 
