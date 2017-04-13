@@ -1,34 +1,41 @@
-#include <Wire.h>
+#include <SparkFunDS1307RTC.h>
 
+#include <Wire.h>
 #include <Servo.h>
 
+//#include <avr/wdt.h>
+
+#define OPEN_TIME 3
+#define CLOSE_TIME 2
 
 //---------------------Motor do relogio
-#define enc_a 2 
-#define enc_b 3
-#define out_a 6
-#define out_b 7
+#define enc_a 18 
+#define enc_b 19
+#define out_a 8
+#define out_b 9
 
 //---------------------Motor da ampulheta
-#define enc_c 18 
-#define enc_d 19
-#define out_c 8
-#define out_d 9
+#define enc_c 3 
+#define enc_d 2
+#define out_c 7
+#define out_d 6
 
-#define motor_enable            A7
-#define motor_enable_ampulheta  A6
-#define position_0_motor        12
-#define position_0_ampulheta    13
+#define motor_enable            10
+#define motor_enable_ampulheta  5
+#define position_0_motor        A0
+#define position_0_ampulheta    A1
 
 //--------------------Reles
-#define main_switch A0
-#define relay_0 4
-#define relay_1 5
+#define main_switch A2
 
 #define NOUTPUTS 10
 static int saida_state_pin[NOUTPUTS] = { 45, 43, 47, 49, 41, 39, 37, 35, 33, 31 };
 static bool saida_state[NOUTPUTS] = { false, false, false, false, false, false, false, false, false, false };
 static unsigned long sm_timer_lampada[3] = {millis(), millis(), millis()};
+
+static bool bOnOff = false;
+
+static unsigned long sm_timer_serie = 0;
 
 //#define STEPS_PER_REV 1920
 #define STEPS_PER_REV 6533
@@ -40,7 +47,6 @@ static unsigned long sm_timer_lampada[3] = {millis(), millis(), millis()};
 #define POS_TOLERANCE 10
 #define AMPULHETA_STOPTIME_SECONDS 30
 
-#define MAX_WORK_TIME 12
 
 static long  enc_count[2]         = {0,0};
 static float rev_sec[2]           = {0,0};
@@ -57,12 +63,14 @@ static int prev_state[2] = {0,0};
 
 static int prev_value = 9999;
 
+static int iSerialRead = 0;
+
 #define K_PA 3  //1.5
 #define K_IA 1.2  //1 
 #define K_DA 0.5  //0.2
 #define K_PWMA 100  //100
 
-#define K_P 1.8  //0.5
+#define K_P 1.2  //0.5
 #define K_I 0.2  //0.1
 #define K_D 0.2  //0.5
 #define K_PWM 95  //95 255/max_speed 
@@ -73,7 +81,7 @@ static float prev_error_p[2]  = {0,0};
 Servo lever[2];
 static unsigned long timer_servo[2];
 static int lever_deg[2]       = {0,0};
-static int lever_pin[2]       = {14,15};
+static int lever_pin[2]       = {11,12};
 static int prev_lever_deg[2]  = {0,0};
 static bool lever_working[2]  = {false, false};
 
@@ -84,7 +92,8 @@ int timer_count = 0;
 int timer_count_amp = 0;
 
 #define BUFFER_SIZE 6
-static char rx_buffer[BUFFER_SIZE];
+static char rx_buffer[BUFFER_SIZE] = {0,0,0,0,0,0};
+static char rx_buffer_tmp[BUFFER_SIZE] = {0,0,0,0,0,0};
 
 enum states 
 { 
@@ -124,13 +133,22 @@ enum states
 #define SERVO_1   0
 #define SERVO_2   1
 
-static enum states sm_motor[2] = {HALT, HALT};
-static unsigned long sm_timer[2] = {millis(), millis()};
+static enum states sm_motor[2]      = {HALT, HALT};
+static unsigned long sm_timer[2]    = {millis(), millis()};
 static unsigned long sm_timer_pause = millis();
 
 void setup() 
-{
+{ 
+  rtc.begin(); // Call rtc.begin() to initialize the library
+  //rtc.setTime(03, 02, 19, 2, 11, 04, 17);  // Uncomment to manually set time
+  rtc.set24Hour(); 
+  
+  ////wdt_disable();
+
   //Serial that will be use to comunicate with the Raspberry
+  Serial3.begin(9600);
+
+  //Serial that will be use to debug
   Serial.begin(9600);
 
   //Serial that will be use to comunicate with the 7 segments display micro
@@ -146,13 +164,12 @@ void setup()
   pinMode(position_0_ampulheta, INPUT);
   pinMode(main_switch, INPUT_PULLUP);
 
-
   //link the interupts to the encoder pins
   attachInterrupt(digitalPinToInterrupt(enc_a), update_enc_relogio, CHANGE);
   attachInterrupt(digitalPinToInterrupt(enc_b), update_enc_relogio, CHANGE);
   
-  //attachInterrupt(digitalPinToInterrupt(enc_c), update_enc_ampulheta, CHANGE);
-  //attachInterrupt(digitalPinToInterrupt(enc_d), update_enc_ampulheta, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(enc_c), update_enc_ampulheta, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(enc_d), update_enc_ampulheta, CHANGE);
   
   pinMode(out_a, OUTPUT);
   pinMode(out_b, OUTPUT); 
@@ -163,9 +180,6 @@ void setup()
   pinMode(motor_enable, OUTPUT);
   pinMode(motor_enable_ampulheta, OUTPUT);
 
-  pinMode(relay_0, OUTPUT);
-  pinMode(relay_1, OUTPUT);
-
   for (int i=0; i<NOUTPUTS; i++)
   {
     //Serial.println(saida_state_pin[i]);
@@ -173,6 +187,10 @@ void setup()
     pinMode(saida_state_pin[i], OUTPUT);
     digitalWrite(saida_state_pin[i], 1);
   }
+
+  pinMode(A3, INPUT_PULLUP);
+
+  bOnOff = digitalRead(main_switch);
 }
 
 //Function that will be associated with the encoder interrupts (Relogio)
@@ -182,8 +200,10 @@ void update_enc_relogio()
 
   actual_state = digitalRead(enc_b) | (digitalRead(enc_a)<<1);
   
-  if(actual_state != prev_state[MOTOR_RELOGIO]){
-    switch(actual_state){
+  if(actual_state != prev_state[MOTOR_RELOGIO])
+  {
+    switch(actual_state)
+    {
       case 0:
         if(prev_state[MOTOR_RELOGIO] == 1)
           enc_count[MOTOR_RELOGIO]++;
@@ -336,14 +356,14 @@ void position_controller(int id)
     if(deg_position[id] < low_limit)
     {
       if(id == MOTOR_RELOGIO)
-        set_speed(0.1, id);
+        set_speed(0.15, id);
       else
         set_speed(0.08, id);
     } 
     else 
     {
       if(id == MOTOR_RELOGIO)
-        set_speed(-0.1, id);
+        set_speed(-0.15, id);
       else
         set_speed(-0.08, id);
     }
@@ -512,12 +532,12 @@ void set_lever(int deg, int id)
 int process_serial()
 {
   int value = 0;
-  char i = 0;
-  char test_number = 0;
+  int i = 0;
+  int test_number = 0;
   
   if(rx_buffer[0] == '-' && rx_buffer[BUFFER_SIZE - 1] == '/')
   {
-    for(i=1;i<BUFFER_SIZE - 1;i++)
+    for(i=1; i<(BUFFER_SIZE - 1); i++)
     {
       if(rx_buffer[i] < '0' || rx_buffer[i] >'9')
         test_number = -1;
@@ -531,6 +551,13 @@ int process_serial()
         year_received = value;
       }
     }
+
+    rx_buffer[0] = '0';
+    rx_buffer[1] = '0';
+    rx_buffer[2] = '0';
+    rx_buffer[3] = '0';
+    rx_buffer[4] = '0';
+    rx_buffer[5] = '0';
   }
   
   return prev_value;
@@ -619,12 +646,20 @@ void control_rele(int rele, bool state)
   
   if(state == true)
   {
+//sugiro
+pinMode(rele, OUTPUT);
+digitalWrite(rele, 0);
+
     digitalWrite(rele, 0);
     saida_state[i] = state;
   }
   else
   {
     digitalWrite(rele, 1);
+    
+//sugiro
+pinMode(rele, INPUT);
+    
     saida_state[i] = state;
   }
 }
@@ -638,7 +673,7 @@ void reset_reles()
   control_rele(saida_state_pin[4], false);
   control_rele(saida_state_pin[5], false);
   control_rele(saida_state_pin[6], false);
-  control_rele(saida_state_pin[7], false);
+  //control_rele(saida_state_pin[7], false);
   control_rele(saida_state_pin[8], false);
   control_rele(saida_state_pin[9], false);
 }
@@ -654,11 +689,17 @@ void motor_statemachine()
 {
   switch(sm_motor[MOTOR_RELOGIO])
   {
+    static enum states prev_state = HALT;
+    
     case HALT:
       break;
     case START:
+      sm_timer_serie = millis();
+      //////wdt_enable(WDTO_8S);
       if(calibrate_position_zero_motor(MOTOR_RELOGIO))
       {
+        //wdt_disable();
+        
         if(offset != 0)
         {
           set_position(offset, MOTOR_RELOGIO);
@@ -671,8 +712,15 @@ void motor_statemachine()
       Serial.println((int) last_year_received);
       Serial.print("year_received:");
       Serial.println((int) year_received)´*/
+      if((millis() - sm_timer_serie) > 150000) //2,5 minutes 
+      {
+        //wdt_enable(WDTO_15MS);
+      }
+      
       if(last_year_received != year_received)
-      {  
+      { 
+        sm_timer_serie = millis();
+         
         //Serial.println("last_year_received != year_received");
                      
         reset_lampadas_timer();
@@ -682,38 +730,47 @@ void motor_statemachine()
            case 1927:
             set_position(_1927_POS, MOTOR_RELOGIO);
             send_new_year(9999);
+            //wdt_enable(WDTO_8S);
             break;
           case 1928:
             set_position(_1928_POS, MOTOR_RELOGIO);
             //send_new_year(9998);
+            //wdt_enable(WDTO_8S);
             break;
           case 1967:
             set_position(_1967_POS, MOTOR_RELOGIO);
             send_new_year(9999);
+            //wdt_enable(WDTO_8S);
             break;
           case 1970:
             set_position(_1970_POS, MOTOR_RELOGIO);
             send_new_year(9999);
+            //wdt_enable(WDTO_8S);
             break;
           case 1980:
             set_position(_1980_POS, MOTOR_RELOGIO);
             send_new_year(9999);
+            //wdt_enable(WDTO_8S);
             break;
           case 1995:
             set_position(_1995_POS, MOTOR_RELOGIO);
             send_new_year(9999);
+            //wdt_enable(WDTO_8S);
             break;    
           case 1998:
             set_position(_1998_POS, MOTOR_RELOGIO);
             send_new_year(9999);
+            //wdt_enable(WDTO_8S);
             break;
           case 2013:
             set_position(_2013_POS, MOTOR_RELOGIO);
             send_new_year(9999);
+            //wdt_enable(WDTO_8S);
             break;
           case 2017:
             set_position(_2017_POS, MOTOR_RELOGIO);
             //send_new_year(9999);
+            //wdt_enable(WDTO_8S);
             break;          
           default:
             goto label_year_undefined;
@@ -740,7 +797,10 @@ label_year_undefined:
     case PAUSE:
       if(desired_position_reached[MOTOR_RELOGIO] && sm_timer_pause < millis())
       {
-        Serial.println('r');
+        //wdt_disable();
+        
+        Serial3.print('r');
+        Serial3.flush();
 
         timer_count = 0;
         send_new_year(9998);        
@@ -756,6 +816,8 @@ label_year_undefined:
         {
           year_received = 2017;
           sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
+
+          //wdt_enable(WDTO_8S);
         }
         else
         {
@@ -763,18 +825,23 @@ label_year_undefined:
         }
       }
       break;
-    case WAITING_TO_REACH:
+    case WAITING_TO_REACH:     
       if(desired_position_reached[MOTOR_RELOGIO] && sm_timer[MOTOR_RELOGIO] < millis())
       {
+        //wdt_disable();
+        
         if(last_year_received != 2017)
         {      
-          Serial.println('r');
+          Serial3.print('r');
+          Serial3.flush();
         }
         
         if(last_year_received == 2017)
         {
           send_new_year(9997);
           sm_motor[MOTOR_RELOGIO] = WAITING_NEW_YEAR;
+
+          ////wdt_enable(WDTO_15MS); 
         }
         else
         {
@@ -786,16 +853,16 @@ label_year_undefined:
       }
       break;
     case SET_LEVERS_FORWARD:
-      set_lever(1,SERVO_1);
-      set_lever(179,SERVO_2);
+      set_lever(40,SERVO_1);
+      set_lever(140,SERVO_2);
       sm_timer[MOTOR_RELOGIO] = millis()+1000;
       sm_motor[MOTOR_RELOGIO] = SET_LEVERS_FORWARD_WAITING;
       break;
     case SET_LEVERS_FORWARD_WAITING:
       if(sm_timer[MOTOR_RELOGIO] < millis())
       {
-        set_lever(179,SERVO_1);
-        set_lever(1,SERVO_2);
+        set_lever(140,SERVO_1);
+        set_lever(40,SERVO_2);
         sm_timer[MOTOR_RELOGIO] = millis()+1000;
         sm_motor[MOTOR_RELOGIO] = SET_LEVERS_BACK_WAITING;
       }
@@ -811,7 +878,9 @@ label_year_undefined:
       {
         //Serial.print("RELAY OFF");
         
-        digitalWrite(relay_0,1);    
+        //digitalWrite(relay_0,1);
+        reset_reles();
+        control_rele(saida_state_pin[7], false);    
         send_new_year(0);
 
         sm_motor[MOTOR_RELOGIO] = HALT;
@@ -820,6 +889,8 @@ label_year_undefined:
         desired_position[MOTOR_AMPULHETA] = 0;
         deg_position[MOTOR_RELOGIO] = 0;
         deg_position[MOTOR_AMPULHETA] = 0;
+
+        //wdt_disable();
       }
       break;
   }
@@ -842,42 +913,166 @@ void caixa_statemachine()
       control_rele(saida_state_pin[4], true);
       control_rele(saida_state_pin[5], true);
       control_rele(saida_state_pin[6], true);
-      control_rele(saida_state_pin[7], true);
+      //control_rele(saida_state_pin[7], true);
       control_rele(saida_state_pin[8], true);
       control_rele(saida_state_pin[9], true);
     }
   }
 }
 
-bool debounce(){
-  static bool state = false;
-  static unsigned long debounce_time = millis();
-
+bool verifica_work_time()
+{
+  rtc.update();
+  int hour = rtc.hour();
+  int minute = rtc.minute();
   
-  if(state == digitalRead(main_switch)){
-    debounce_time = millis();
-  }
-  if(debounce_time + 100 < millis()){
-    state = digitalRead(main_switch);
+  //Serial.print("RTC Hour:");
+  //Serial.println(hour);
+  //Serial.print("RTC Minute:");
+  //Serial.println(minute);
+  
+  //Verifica se esta fora do horario de trabalho
+  if((hour >= CLOSE_TIME) && (hour < OPEN_TIME))
+  {
+    //Serial.println("Not work time");
+    return false;
   }
 
-  return state;
+  //Serial.println("work time");
+  return true;
+}
+
+bool check_switch_state()
+{
+  //Se estiver a desligar ignora o comando do switch
+  //e mantem o estado anterior do switch
+  if(sm_motor[MOTOR_RELOGIO] == SHUTDOWN)
+  {
+    //Serial.println("SWITCH ON");
+    if(bOnOff)
+    {
+      //Serial.println("SWITCH OFF");    
+      return false;
+    }
+    else
+    {
+      //Serial.println("SWITCH ON");
+      return true;
+    }    
+  }
+
+  bool bOnOff_tmp = digitalRead(main_switch);
+
+  if(bOnOff_tmp)
+  {
+    //Serial.println("READ SWITCH: OFF");
+  }
+  else
+  {
+    //Serial.println("READ SWITCH: ON");
+  }
+
+  //Se detetar uma transicao de estado 
+  //Confirma a transicao
+  if(bOnOff_tmp != bOnOff)
+  {
+    //Serial.println("Transition will be checked");
+
+    //Efectua varias leituras para evitar debouncing
+    for(int i=0; i<5; i++)
+    {
+      bool bOnOff_tmp_ = digitalRead(main_switch); 
+      
+      if(bOnOff_tmp_)
+      {
+        //Serial.println("#READ SWITCH: OFF");
+      }
+      else
+      {
+        //Serial.println("#READ SWITCH: ON");
+      }
+
+      //Se a leitura nao for consistente
+      //devolve o estado anterior
+      if(bOnOff_tmp_ != bOnOff_tmp)
+      {
+        //Serial.println("Failed to Confirm Transition");
+        
+        if(bOnOff)
+        {
+          //Serial.println("SWITCH OFF");
+          return false;
+        }
+        else
+        {
+          //Serial.println("SWITCH ON");
+          return true;
+        }
+      }
+
+      delay(500);
+    }
+    
+    //Se a leitura for consistente
+    //Faz o update do estado do switch e devolce o valor do mesmo
+    //Switch detectado como ligado
+    //Vai verificar o horario de funcionamento
+    if(!bOnOff_tmp)
+    {
+      bOnOff = bOnOff_tmp;
+
+      //Serial.println("SWITCH ON");
+      return true;      
+    }
+    //Switch detectado como desligado
+    else
+    {
+      bOnOff = bOnOff_tmp;
+
+      //Serial.println("SWITCH OFF");
+      return false;
+    }
+  }
+  //Se nao detectar transicao
+  //devolve o estado anterior
+  else
+  {
+    if(bOnOff)
+    {
+      //Serial.println("SWITCH OFF");
+      return false;
+    }
+    else
+    {
+      //Serial.println("SWITCH ON");
+      return true;
+    }
+  }
+  
+  return true;
 }
 
 bool check_onoff_switch()
-{
+{ 
   bool bRet = true;
   
-  //if( (!digitalRead(main_switch)) && (!check_max_time()) )
-  if(!debounce())
-  {    
-    digitalWrite(relay_0,0);
+  //if(!digitalRead(main_switch))
+  //Se o switch estiver ligado e estiver dentro do horario de trabalho
+  //devolve true para o ciclo de controlo
+  if( (check_switch_state()) && (verifica_work_time()) )
+  {
+    //Serial.println("ON");
+        
+    //digitalWrite(relay_0,0);
+    control_rele(saida_state_pin[7], true);
+    
     digitalWrite(motor_enable,1);
     digitalWrite(motor_enable_ampulheta,1);     
 
-    for(int i=0; i<2 ;i++)
+    int i=0;
+    for(i=0; i<2 ;i++)
     {
-      if((sm_motor[i] == SHUTDOWN) || ((sm_motor[i] == HALT)))
+      if(sm_motor[i] == HALT)
       {
         //Serial.print("ON");
         sm_motor[i] = START;
@@ -892,6 +1087,7 @@ bool check_onoff_switch()
       }
     }
   } 
+  //Caso contrario devolve false para o ciclo de controlo
   else
   {   
     if(sm_motor[MOTOR_RELOGIO] != SHUTDOWN)
@@ -900,21 +1096,20 @@ bool check_onoff_switch()
         
       digitalWrite(motor_enable,0);
       digitalWrite(motor_enable_ampulheta,0);
-  
-      for(int i=0; i<2 ;i++)
+
+      int i=0;
+      for(i=0; i<2 ;i++)
       {
         //Reset the state machines
         enc_count[i]      = 0;
         prev_enc_count[i] = 0;
         sm_motor[i]       = SHUTDOWN;
-        sm_timer[i]       = millis() + 10000;
+        sm_timer[i]       = millis() + 5000;
   
         //Send the shutdown signal to the raspberry
-        Serial.print("X");
-        Serial.print("X");
-        Serial.print("X");
-        Serial.print("X");
-        Serial.print("X");     
+        Serial3.print("X");
+        Serial3.print("X");
+        Serial3.flush();    
       }
     }
     
@@ -924,13 +1119,27 @@ bool check_onoff_switch()
   return bRet;
 }
 
+int freeRam () 
+{
+  extern int __heap_start, *__brkval; 
+  int v; 
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+}
   
 void loop() 
 { 
+  static bool bInit = false;
+  while(digitalRead(A3) && !bInit)
+  {
+    Serial.println("A");
+  }
+
+  bInit = true;
+  
   if(check_onoff_switch())
   {
     update_motor(MOTOR_RELOGIO);
-    //update_motor(MOTOR_AMPULHETA);
+    update_motor(MOTOR_AMPULHETA);
     
     update_lever(MOTOR_RELOGIO);
     update_lever(MOTOR_AMPULHETA);
@@ -939,17 +1148,18 @@ void loop()
   }
   
   motor_statemachine();
-  //ampulheta_state_machine();
+  ampulheta_state_machine();
   caixa_statemachine();
+
+  //Serial.println(freeRam()); 
 }
 
-
-void serialEvent()
+void serialEvent3()
 { 
  char i = 0;
-  while (Serial.available())
+  while (Serial3.available())
   {
-    char received = (char)Serial.read();
+    char received = (char)Serial3.read();
 
     for(i=1;i<BUFFER_SIZE;i++)
     {
@@ -964,7 +1174,8 @@ void serialEvent()
   
   if(last_year_received == value_)
   {
-    Serial.print('r');
+    Serial3.print('r');
+    Serial3.flush();
   }
 }
 
