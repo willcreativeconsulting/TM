@@ -5,10 +5,8 @@
 
 #include <avr/wdt.h>
 
-#define OPEN_TIME 04
-#define OPEN_TIME_MINUTE 03
-#define CLOSE_TIME 04
-#define CLOSE_TIME_MINUTE 00
+#define OPEN_TIME 12
+#define CLOSE_TIME 3
 
 //---------------------Motor do relogio
 #define enc_a 18 
@@ -138,6 +136,8 @@ enum states
 static enum states sm_motor[2]      = {HALT, HALT};
 static unsigned long sm_timer[2]    = {millis(), millis()};
 static unsigned long sm_timer_pause = millis();
+
+char received;
 
 void setup() 
 { 
@@ -1008,9 +1008,9 @@ bool verifica_work_time()
   rtc.update();
   
   int hour = rtc.getHour();
-  int minute = rtc.getMinute();
+  //int minute = rtc.getMinute();
 
-  int time = (hour*100)+minute;
+  //int time = (hour*100)+minute;
   ////serial.print("RTC Hour:");
   ////serial.println(hour);
   ////serial.print("RTC Minute:");
@@ -1018,7 +1018,8 @@ bool verifica_work_time()
   ////serial.println(time);
   
   //Verifica se esta fora do horario de trabalho
-  if((time >= (CLOSE_TIME*100+CLOSE_TIME_MINUTE)) && (time < (OPEN_TIME*100+OPEN_TIME_MINUTE)))
+  //if((time >= (CLOSE_TIME*100+CLOSE_TIME_MINUTE)) && (time < (OPEN_TIME*100+OPEN_TIME_MINUTE)))
+  if((hour >= CLOSE_TIME) && (hour < OPEN_TIME))
   {
     //serial.print("RTC Hour:");
     //serial.println(hour);
@@ -1257,7 +1258,7 @@ void serialEvent3()
   uint8_t j = 0;
   while ((Serial3.available()) && (j<10))
   {
-    char received = (char)Serial3.read();
+    received = (char)Serial3.read();
     
     for(i=1;i<BUFFER_SIZE;i++)
     {
