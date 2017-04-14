@@ -3,10 +3,12 @@
 #include <Wire.h>
 #include <Servo.h>
 
-//#include <avr/wdt.h>
+#include <avr/wdt.h>
 
-#define OPEN_TIME 3
-#define CLOSE_TIME 2
+#define OPEN_TIME 04
+#define OPEN_TIME_MINUTE 03
+#define CLOSE_TIME 04
+#define CLOSE_TIME_MINUTE 00
 
 //---------------------Motor do relogio
 #define enc_a 18 
@@ -65,7 +67,7 @@ static int prev_value = 9999;
 
 static int iSerialRead = 0;
 
-#define K_PA 3  //1.5
+#define K_PA 2  //1.5
 #define K_IA 1.2  //1 
 #define K_DA 0.5  //0.2
 #define K_PWMA 100  //100
@@ -140,16 +142,16 @@ static unsigned long sm_timer_pause = millis();
 void setup() 
 { 
   rtc.begin(); // Call rtc.begin() to initialize the library
-  //rtc.setTime(03, 02, 19, 2, 11, 04, 17);  // Uncomment to manually set time
-  rtc.set24Hour(); 
+  //rtc.setTime(30, 57, 23, 5, 14, 04, 17);  // Uncomment to manually set time
+  //rtc.set24Hour(); 
   
-  ////wdt_disable();
+  wdt_disable();
 
   //Serial that will be use to comunicate with the Raspberry
   Serial3.begin(9600);
 
   //Serial that will be use to debug
-  Serial.begin(9600);
+  //serial.begin(9600);
 
   //Serial that will be use to comunicate with the 7 segments display micro
   Serial2.begin(9600);
@@ -182,7 +184,7 @@ void setup()
 
   for (int i=0; i<NOUTPUTS; i++)
   {
-    //Serial.println(saida_state_pin[i]);
+    ////serial.println(saida_state_pin[i]);
     
     pinMode(saida_state_pin[i], OUTPUT);
     digitalWrite(saida_state_pin[i], 1);
@@ -191,6 +193,8 @@ void setup()
   pinMode(A3, INPUT_PULLUP);
 
   bOnOff = digitalRead(main_switch);
+
+  wdt_enable(WDTO_8S);
 }
 
 //Function that will be associated with the encoder interrupts (Relogio)
@@ -315,10 +319,10 @@ void set_speed(float new_speed, int id)
   desired_speed[id] = new_speed;
   
   /*
-  Serial.println(" ");
-  Serial.print(" desired_speed[%i]:", id);
-  Serial.println((float) desired_speed[id] );
-  Serial.println(" ");
+  //serial.println(" ");
+  //serial.print(" desired_speed[%i]:", id);
+  //serial.println((float) desired_speed[id] );
+  //serial.println(" ");
   */
 }
 
@@ -328,10 +332,10 @@ void set_position(float deg, int id)
   desired_position[id] = deg;
   
   /*
-  Serial.println(" ");
-  Serial.print(" desired_position[%i]:", id);
-  Serial.println((float) desired_position[id] );
-  Serial.println(" ");
+  //serial.println(" ");
+  //serial.print(" desired_position[%i]:", id);
+  //serial.println((float) desired_position[id] );
+  //serial.println(" ");
   */
 }
  
@@ -341,12 +345,12 @@ void position_controller(int id)
   float high_limit = desired_position[id] + POS_TOLERANCE/2;
 
   /*
-  Serial.print(" low_limit");
-  Serial.print((float) low_limit);
-  Serial.print(" pos");
-  Serial.print((float) deg_position[id]);
-  Serial.print(" high_limit");
-  Serial.println((float) high_limit);
+  //serial.print(" low_limit");
+  //serial.print((float) low_limit);
+  //serial.print(" pos");
+  //serial.print((float) deg_position[id]);
+  //serial.print(" high_limit");
+  //serial.println((float) high_limit);
   */
    
   if( !(low_limit< deg_position[id] && high_limit > deg_position[id]))
@@ -407,19 +411,19 @@ void speed_controller(int id)
     pwm = -255;
 
   /* 
-  Serial.print(" desired_speed[%i]:", id);
-  Serial.print((float)desired_speed[id]);
-  Serial.print(" actual speed[%i]:", id);
-  Serial.print((float)rev_sec[id]);
+  //serial.print(" desired_speed[%i]:", id);
+  //serial.print((float)desired_speed[id]);
+  //serial.print(" actual speed[%i]:", id);
+  //serial.print((float)rev_sec[id]);
   
-  Serial.print(" error_p[%i]:", id);
-  Serial.print((float)error_p[id]);
-  Serial.print(" error_i[%i]:", id);
-  Serial.print((float)error_i[id]);
-  Serial.print(" error_d[%i]:", id);
-  Serial.print((float)error_d[id]);
-  Serial.print(" pwm:");
-  Serial.println(pwm);
+  //serial.print(" error_p[%i]:", id);
+  //serial.print((float)error_p[id]);
+  //serial.print(" error_i[%i]:", id);
+  //serial.print((float)error_i[id]);
+  //serial.print(" error_d[%i]:", id);
+  //serial.print((float)error_d[id]);
+  //serial.print(" pwm:");
+  //serial.println(pwm);
   */
 
   if(pwm>=0)
@@ -483,22 +487,22 @@ void update_motor(int id)
     rev_sec[id] = (float) (enc_steps*1.1/(steps_rev*1.1));
 
     /*   
-    Serial.print(" enc_steps:");
-    Serial.print((int)enc_steps);
-    Serial.print(" enc_count[%i]:", id);
-    Serial.print((int)enc_count[id]);
-    Serial.print(" prev_enc_count[%i]:", id);
-    Serial.print((int)prev_enc_count[id]);
-    Serial.print(" rev_sec[%s]:", id);
-    Serial.println((float)rev_sec[id]);
+    //serial.print(" enc_steps:");
+    //serial.print((int)enc_steps);
+    //serial.print(" enc_count[%i]:", id);
+    //serial.print((int)enc_count[id]);
+    //serial.print(" prev_enc_count[%i]:", id);
+    //serial.print((int)prev_enc_count[id]);
+    //serial.print(" rev_sec[%s]:", id);
+    //serial.println((float)rev_sec[id]);
     // */    
     //deg_position[id] = ((float)((enc_count[id]*1.0)/(STEPS_PER_REV*1.0))- (int)(enc_count[id]/STEPS_PER_REV))*360;
     deg_position[id] = ((float)((enc_count[id]*1.0)/(steps_rev*1.0)))*360;
     
-    /*Serial.print(" enc_count[%i]:", id);
-    Serial.print((int)enc_count[id]);
-    Serial.print(" deg_position[%i]:", id);
-    Serial.println((float)deg_position[id]);*/
+    /*//serial.print(" enc_count[%i]:", id);
+    //serial.print((int)enc_count[id]);
+    //serial.print(" deg_position[%i]:", id);
+    //serial.println((float)deg_position[id]);*/
         
     speed_controller(id);
     
@@ -575,8 +579,52 @@ void send_new_year(int year)
 
 
 
+void print_state(enum states state){
+  switch(state){
+    case HALT:
+      ////serial.println("HALT");
+      break;
+    case START:
+      ////serial.println("START");
+      break;
+    case PAUSE:
+      //////serial.println("PAUSE");
+      break;
+    case PAUSE_:
+      ////serial.println("PAUSE_");
+      break;
+    case SHUTDOWN:
+      //serial.println("SHUTDOWN");
+      break;
+    case WAITING_NEW_YEAR:
+      //serial.println("WAITING_NEW_YEAR");
+      break;
+    case WAITING_TO_REACH:
+      //serial.println("WAITING_TO_REACH");
+      break;
+    case SET_LEVERS_FORWARD:
+      //serial.println("SET_LEVERS_FORWARD");
+      break;
+    case SET_LEVERS_FORWARD_WAITING:
+      //serial.println("SET_LEVERS_FORWARD_WAITING");
+      break;
+    case SET_LEVERS_BACK_WAITING:
+      //serial.println("SET_LEVERS_BACK_WAITING");
+      break;
+    case AMPULHETA_0:
+      //serial.println("AMPULHETA_0");
+      break;
+    case AMPULHETA_180:
+      //serial.println("AMPULHETA_180");
+      break;
+  }
+}
+
 void ampulheta_state_machine()
 {
+  static enum states prev_sm = HALT;
+
+  
   switch(sm_motor[MOTOR_AMPULHETA])
   {
     case HALT:
@@ -631,6 +679,14 @@ void ampulheta_state_machine()
       sm_motor[MOTOR_AMPULHETA] = HALT;
       break;
   }
+
+
+  if(prev_sm != sm_motor[MOTOR_AMPULHETA]){
+    //serial.print("New ampulheta:");
+    print_state(sm_motor[MOTOR_AMPULHETA]);
+  }
+  prev_sm = sm_motor[MOTOR_AMPULHETA];
+    
 }
 
 void control_rele(int rele, bool state)
@@ -687,9 +743,10 @@ void reset_lampadas_timer()
 
 void motor_statemachine()
 {
+  static enum states prev_state = HALT;
+    
   switch(sm_motor[MOTOR_RELOGIO])
   {
-    static enum states prev_state = HALT;
     
     case HALT:
       break;
@@ -708,10 +765,10 @@ void motor_statemachine()
       }
       break;
     case WAITING_NEW_YEAR:
-      /*Serial.print("last_year_received:");
-      Serial.println((int) last_year_received);
-      Serial.print("year_received:");
-      Serial.println((int) year_received)´*/
+      /*//serial.print("last_year_received:");
+      //serial.println((int) last_year_received);
+      //serial.print("year_received:");
+      //serial.println((int) year_received)´*/
       if((millis() - sm_timer_serie) > 150000) //2,5 minutes 
       {
         //wdt_enable(WDTO_15MS);
@@ -721,7 +778,7 @@ void motor_statemachine()
       { 
         sm_timer_serie = millis();
          
-        //Serial.println("last_year_received != year_received");
+        ////serial.println("last_year_received != year_received");
                      
         reset_lampadas_timer();
         
@@ -802,6 +859,8 @@ label_year_undefined:
         Serial3.print('r');
         Serial3.flush();
 
+        //serial.print("r - Pause");
+
         timer_count = 0;
         send_new_year(9998);        
         sm_timer_pause = millis() + 1000;
@@ -826,6 +885,13 @@ label_year_undefined:
       }
       break;
     case WAITING_TO_REACH:     
+      
+      //serial.print("desired_position:");
+      //serial.print(desired_position_reached[MOTOR_RELOGIO]);
+      //serial.print(" sm_timer:");
+      //serial.print(sm_timer[MOTOR_RELOGIO]);
+      //serial.print(" millis:");
+      //serial.println(millis());
       if(desired_position_reached[MOTOR_RELOGIO] && sm_timer[MOTOR_RELOGIO] < millis())
       {
         //wdt_disable();
@@ -834,6 +900,8 @@ label_year_undefined:
         {      
           Serial3.print('r');
           Serial3.flush();
+
+          //serial.print("r wait to reach");
         }
         
         if(last_year_received == 2017)
@@ -859,6 +927,12 @@ label_year_undefined:
       sm_motor[MOTOR_RELOGIO] = SET_LEVERS_FORWARD_WAITING;
       break;
     case SET_LEVERS_FORWARD_WAITING:
+    //serial.print("sm_timer:");
+    //serial.print(sm_timer[MOTOR_RELOGIO]);
+    //serial.print(" millis:");
+    //serial.println(millis());
+    
+    
       if(sm_timer[MOTOR_RELOGIO] < millis())
       {
         set_lever(140,SERVO_1);
@@ -876,7 +950,7 @@ label_year_undefined:
     case SHUTDOWN:
       if(sm_timer[MOTOR_RELOGIO] < millis())
       {
-        //Serial.print("RELAY OFF");
+        ////serial.print("RELAY OFF");
         
         //digitalWrite(relay_0,1);
         reset_reles();
@@ -894,6 +968,12 @@ label_year_undefined:
       }
       break;
   }
+
+  if(prev_state != sm_motor[MOTOR_RELOGIO]){
+    //serial.print("New motor state:");
+    print_state(sm_motor[MOTOR_RELOGIO]);
+  }
+  prev_state = sm_motor[MOTOR_RELOGIO];
 }
 
 void caixa_statemachine()
@@ -923,22 +1003,31 @@ void caixa_statemachine()
 bool verifica_work_time()
 {
   rtc.update();
-  int hour = rtc.hour();
-  int minute = rtc.minute();
   
-  //Serial.print("RTC Hour:");
-  //Serial.println(hour);
-  //Serial.print("RTC Minute:");
-  //Serial.println(minute);
+  int hour = rtc.getHour();
+  int minute = rtc.getMinute();
+
+  int time = (hour*100)+minute;
+  ////serial.print("RTC Hour:");
+  ////serial.println(hour);
+  ////serial.print("RTC Minute:");
+  ////serial.println(minute);
+  ////serial.println(time);
   
   //Verifica se esta fora do horario de trabalho
-  if((hour >= CLOSE_TIME) && (hour < OPEN_TIME))
+  if((time >= (CLOSE_TIME*100+CLOSE_TIME_MINUTE)) && (time < (OPEN_TIME*100+OPEN_TIME_MINUTE)))
   {
-    //Serial.println("Not work time");
+    //serial.print("RTC Hour:");
+    //serial.println(hour);
+    //serial.print("RTC Minute:");
+    //serial.println(minute);
+  
+    //serial.println(time);
+    //serial.println("Not work time");
     return false;
   }
 
-  //Serial.println("work time");
+  ////serial.println("work time");
   return true;
 }
 
@@ -948,15 +1037,15 @@ bool check_switch_state()
   //e mantem o estado anterior do switch
   if(sm_motor[MOTOR_RELOGIO] == SHUTDOWN)
   {
-    //Serial.println("SWITCH ON");
+    ////serial.println("SWITCH ON");
     if(bOnOff)
     {
-      //Serial.println("SWITCH OFF");    
+      ////serial.println("SWITCH OFF");    
       return false;
     }
     else
     {
-      //Serial.println("SWITCH ON");
+      ////serial.println("SWITCH ON");
       return true;
     }    
   }
@@ -965,18 +1054,18 @@ bool check_switch_state()
 
   if(bOnOff_tmp)
   {
-    //Serial.println("READ SWITCH: OFF");
+    ////serial.println("READ SWITCH: OFF");
   }
   else
   {
-    //Serial.println("READ SWITCH: ON");
+    ////serial.println("READ SWITCH: ON");
   }
 
   //Se detetar uma transicao de estado 
   //Confirma a transicao
   if(bOnOff_tmp != bOnOff)
   {
-    //Serial.println("Transition will be checked");
+    //serial.println("Transition will be checked");
 
     //Efectua varias leituras para evitar debouncing
     for(int i=0; i<5; i++)
@@ -985,27 +1074,27 @@ bool check_switch_state()
       
       if(bOnOff_tmp_)
       {
-        //Serial.println("#READ SWITCH: OFF");
+        ////serial.println("#READ SWITCH: OFF");
       }
       else
       {
-        //Serial.println("#READ SWITCH: ON");
+        ////serial.println("#READ SWITCH: ON");
       }
 
       //Se a leitura nao for consistente
       //devolve o estado anterior
       if(bOnOff_tmp_ != bOnOff_tmp)
       {
-        //Serial.println("Failed to Confirm Transition");
+        //serial.println("Failed to Confirm Transition");
         
         if(bOnOff)
         {
-          //Serial.println("SWITCH OFF");
+          ////serial.println("SWITCH OFF");
           return false;
         }
         else
         {
-          //Serial.println("SWITCH ON");
+          ////serial.println("SWITCH ON");
           return true;
         }
       }
@@ -1021,7 +1110,7 @@ bool check_switch_state()
     {
       bOnOff = bOnOff_tmp;
 
-      //Serial.println("SWITCH ON");
+      ////serial.println("SWITCH ON");
       return true;      
     }
     //Switch detectado como desligado
@@ -1029,7 +1118,7 @@ bool check_switch_state()
     {
       bOnOff = bOnOff_tmp;
 
-      //Serial.println("SWITCH OFF");
+      ////serial.println("SWITCH OFF");
       return false;
     }
   }
@@ -1039,12 +1128,12 @@ bool check_switch_state()
   {
     if(bOnOff)
     {
-      //Serial.println("SWITCH OFF");
+      ////serial.println("SWITCH OFF");
       return false;
     }
     else
     {
-      //Serial.println("SWITCH ON");
+      ////serial.println("SWITCH ON");
       return true;
     }
   }
@@ -1061,7 +1150,7 @@ bool check_onoff_switch()
   //devolve true para o ciclo de controlo
   if( (check_switch_state()) && (verifica_work_time()) )
   {
-    //Serial.println("ON");
+    ////serial.println("ON");
         
     //digitalWrite(relay_0,0);
     control_rele(saida_state_pin[7], true);
@@ -1074,7 +1163,7 @@ bool check_onoff_switch()
     {
       if(sm_motor[i] == HALT)
       {
-        //Serial.print("ON");
+        ////serial.print("ON");
         sm_motor[i] = START;
 
         last_year_received = 0;
@@ -1092,7 +1181,7 @@ bool check_onoff_switch()
   {   
     if(sm_motor[MOTOR_RELOGIO] != SHUTDOWN)
     {
-      //Serial.print("SHUTDOWN");
+      //serial.print("SHUTDOWN");
         
       digitalWrite(motor_enable,0);
       digitalWrite(motor_enable_ampulheta,0);
@@ -1104,12 +1193,14 @@ bool check_onoff_switch()
         enc_count[i]      = 0;
         prev_enc_count[i] = 0;
         sm_motor[i]       = SHUTDOWN;
-        sm_timer[i]       = millis() + 5000;
+        sm_timer[i]       = millis() + 10000;
   
         //Send the shutdown signal to the raspberry
         Serial3.print("X");
         Serial3.print("X");
-        Serial3.flush();    
+        Serial3.flush();   
+
+        //serial.print('X');
       }
     }
     
@@ -1128,13 +1219,14 @@ int freeRam ()
   
 void loop() 
 { 
-  static bool bInit = false;
+  wdt_reset();
+  
+  /*static bool bInit = false;
   while(digitalRead(A3) && !bInit)
   {
-    Serial.println("A");
+    //serial.println("A");
   }
-
-  bInit = true;
+  bInit = true;*/
   
   if(check_onoff_switch())
   {
@@ -1145,37 +1237,45 @@ void loop()
     update_lever(MOTOR_AMPULHETA);
   
     process_serial();
+  } else {
+    //serial.println("not updating");
   }
   
   motor_statemachine();
   ampulheta_state_machine();
   caixa_statemachine();
 
-  //Serial.println(freeRam()); 
+  ////serial.println(freeRam()); 
 }
 
 void serialEvent3()
 { 
- char i = 0;
-  while (Serial3.available())
+  uint8_t i = 0;
+  uint8_t j = 0;
+  while ((Serial3.available()) && (j<10))
   {
     char received = (char)Serial3.read();
-
+    
     for(i=1;i<BUFFER_SIZE;i++)
     {
       rx_buffer[i-1]=rx_buffer[i];
     }
     
     rx_buffer[BUFFER_SIZE-1] = received;
+
+    j++;
   }
 
-  int value_ = (rx_buffer[1]-'0')*1000 + (rx_buffer[2]-'0')*100 + (rx_buffer[3]-'0')*10 + (rx_buffer[4]-'0');
-  //Serial.print(value_);
+  //int value_ = (rx_buffer[1]-'0')*1000 + (rx_buffer[2]-'0')*100 + (rx_buffer[3]-'0')*10 + (rx_buffer[4]-'0');
+  ////serial.print("year:");
+  ////serial.print(value_);
   
-  if(last_year_received == value_)
+  /*if(last_year_received == value_)
   {
     Serial3.print('r');
     Serial3.flush();
-  }
+
+    //serial.print('r');
+  }*/
 }
 
