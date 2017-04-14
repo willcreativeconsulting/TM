@@ -67,7 +67,7 @@ static int prev_value = 9999;
 
 static int iSerialRead = 0;
 
-#define K_PA 2  //1.5
+#define K_PA 1.5  //1.5
 #define K_IA 1.2  //1 
 #define K_DA 0.5  //0.2
 #define K_PWMA 100  //100
@@ -450,7 +450,10 @@ bool calibrate_position_zero_motor(int id)
   
   if(fb)
   {
-    set_speed(0.2, id);
+    if(id == 0)
+      set_speed(0.2, id);
+    else
+      set_speed(0.1, id);
     
     return false;
   } 
