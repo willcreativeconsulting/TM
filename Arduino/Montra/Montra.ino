@@ -5,7 +5,7 @@
 
 #include <avr/wdt.h>
 
-#define OPEN_TIME 12
+#define OPEN_TIME 11
 #define CLOSE_TIME 3
 
 //---------------------Motor do relogio
@@ -142,8 +142,8 @@ char received;
 void setup() 
 { 
   rtc.begin(); // Call rtc.begin() to initialize the library
-  //rtc.setTime(30, 57, 23, 5, 14, 04, 17);  // Uncomment to manually set time
-  //rtc.set24Hour(); 
+  //rtc.setTime(30, 24, 10, 5, 14, 04, 17);  // Uncomment to manually set time
+  rtc.set24Hour(); 
   
   wdt_disable();
 
@@ -151,7 +151,7 @@ void setup()
   Serial3.begin(9600);
 
   //Serial that will be use to debug
-  //serial.begin(9600);
+  //Serial.begin(9600);
 
   //Serial that will be use to comunicate with the 7 segments display micro
   Serial2.begin(9600);
@@ -193,6 +193,9 @@ void setup()
   pinMode(A3, INPUT_PULLUP);
 
   bOnOff = digitalRead(main_switch);
+
+  //Para garantir que em caso de wdt reset o raspberry descarrega  condensador
+  delay(10000);
 
   wdt_enable(WDTO_8S);
 }
@@ -706,8 +709,8 @@ void control_rele(int rele, bool state)
   if(state == true)
   {
 //sugiro
-pinMode(rele, OUTPUT);
-digitalWrite(rele, 0);
+//pinMode(rele, OUTPUT);
+//digitalWrite(rele, 0);
 
     digitalWrite(rele, 0);
     saida_state[i] = state;
@@ -717,7 +720,7 @@ digitalWrite(rele, 0);
     digitalWrite(rele, 1);
     
 //sugiro
-pinMode(rele, INPUT);
+//pinMode(rele, INPUT);
     
     saida_state[i] = state;
   }
@@ -731,10 +734,10 @@ void reset_reles()
   control_rele(saida_state_pin[3], false);
   control_rele(saida_state_pin[4], false);
   control_rele(saida_state_pin[5], false);
-  control_rele(saida_state_pin[6], false);
+  //control_rele(saida_state_pin[6], false);
   //control_rele(saida_state_pin[7], false);
-  control_rele(saida_state_pin[8], false);
-  control_rele(saida_state_pin[9], false);
+  //control_rele(saida_state_pin[8], false);
+  //control_rele(saida_state_pin[9], false);
 }
 
 void reset_lampadas_timer()
@@ -957,7 +960,7 @@ label_year_undefined:
         
         //digitalWrite(relay_0,1);
         reset_reles();
-        control_rele(saida_state_pin[7], false);    
+        control_rele(saida_state_pin[6], false);    
         send_new_year(0);
 
         sm_motor[MOTOR_RELOGIO] = HALT;
@@ -995,10 +998,10 @@ void caixa_statemachine()
       control_rele(saida_state_pin[3], true);
       control_rele(saida_state_pin[4], true);
       control_rele(saida_state_pin[5], true);
-      control_rele(saida_state_pin[6], true);
+      //control_rele(saida_state_pin[6], true);
       //control_rele(saida_state_pin[7], true);
-      control_rele(saida_state_pin[8], true);
-      control_rele(saida_state_pin[9], true);
+      //control_rele(saida_state_pin[8], true);
+      //control_rele(saida_state_pin[9], true);
     }
   }
 }
@@ -1011,23 +1014,39 @@ bool verifica_work_time()
   //int minute = rtc.getMinute();
 
   //int time = (hour*100)+minute;
-  ////serial.print("RTC Hour:");
-  ////serial.println(hour);
-  ////serial.print("RTC Minute:");
-  ////serial.println(minute);
+  //Serial.print("RTC Hour:");
+  //Serial.println(hour);
+  //Serial.print("RTC Minute:");
+  //Serial.println(minute);
   ////serial.println(time);
   
   //Verifica se esta fora do horario de trabalho
   //if((time >= (CLOSE_TIME*100+CLOSE_TIME_MINUTE)) && (time < (OPEN_TIME*100+OPEN_TIME_MINUTE)))
   if((hour >= CLOSE_TIME) && (hour < OPEN_TIME))
   {
-    //serial.print("RTC Hour:");
-    //serial.println(hour);
-    //serial.print("RTC Minute:");
-    //serial.println(minute);
-  
-    //serial.println(time);
+    //serial.println("Not work time will be checked");
+            
+    int hour_tmp = 0;
+    
+    for(int k=0; k<10; k++)
+    {
+        rtc.update();
+
+        hour_tmp = rtc.getHour();
+
+        //serial.print("RTC Hour_tmp:");
+        //serial.println(hour_tmp);
+    
+        if(hour_tmp != hour)
+        {
+          //serial.println("Failed to verify Not work time");
+                  
+          return true;
+        }
+    }
+
     //serial.println("Not work time");
+            
     return false;
   }
 
@@ -1153,11 +1172,12 @@ bool check_onoff_switch()
   //Se o switch estiver ligado e estiver dentro do horario de trabalho
   //devolve true para o ciclo de controlo
   if( (check_switch_state()) && (verifica_work_time()) )
+  //if(verifica_work_time())
   {
     ////serial.println("ON");
         
     //digitalWrite(relay_0,0);
-    control_rele(saida_state_pin[7], true);
+    control_rele(saida_state_pin[6], true);
     
     digitalWrite(motor_enable,1);
     digitalWrite(motor_enable_ampulheta,1);     
