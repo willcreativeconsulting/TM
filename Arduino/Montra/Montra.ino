@@ -1,4 +1,4 @@
-#include <SparkFunDS1307RTC.h>
+//#include <SparkFunDS1307RTC.h>
 
 #include <Wire.h>
 #include <Servo.h>
@@ -70,10 +70,10 @@ static int iSerialRead = 0;
 #define K_DA 0.5  //0.2
 #define K_PWMA 100  //100
 
-#define K_P 1.2  //0.5
+#define K_P 2.5  //0.5
 #define K_I 0.2  //0.1
-#define K_D 0.2  //0.5
-#define K_PWM 95  //95 255/max_speed 
+#define K_D 0.4  //0.5
+#define K_PWM 100  //95 255/max_speed 
 
 static float error_i[2]       = {0,0};
 static float prev_error_p[2]  = {0,0};
@@ -141,9 +141,9 @@ char received;
 
 void setup() 
 { 
-  rtc.begin(); // Call rtc.begin() to initialize the library
-  //rtc.setTime(30, 24, 10, 5, 14, 04, 17);  // Uncomment to manually set time
-  rtc.set24Hour(); 
+  //rtc.begin(); // Call rtc.begin() to initialize the library
+  //rtc.setTime(30, 37, 15, 5, 14, 04, 17);  // Uncomment to manually set time
+  //rtc.set24Hour(); 
   
   wdt_disable();
 
@@ -151,7 +151,7 @@ void setup()
   Serial3.begin(9600);
 
   //Serial that will be use to debug
-  //Serial.begin(9600);
+  Serial.begin(9600);
 
   //Serial that will be use to comunicate with the 7 segments display micro
   Serial2.begin(9600);
@@ -1006,25 +1006,28 @@ void caixa_statemachine()
   }
 }
 
+/*
 bool verifica_work_time()
 {
   rtc.update();
   
   int hour = rtc.getHour();
-  //int minute = rtc.getMinute();
+
+  rtc.update();
+  int minute = rtc.getMinute();
 
   //int time = (hour*100)+minute;
-  //Serial.print("RTC Hour:");
-  //Serial.println(hour);
-  //Serial.print("RTC Minute:");
-  //Serial.println(minute);
+  Serial.print("RTC Hour:");
+  Serial.println(hour);
+  Serial.print("RTC Minute:");
+  Serial.println(minute);
   ////serial.println(time);
   
   //Verifica se esta fora do horario de trabalho
   //if((time >= (CLOSE_TIME*100+CLOSE_TIME_MINUTE)) && (time < (OPEN_TIME*100+OPEN_TIME_MINUTE)))
   if((hour >= CLOSE_TIME) && (hour < OPEN_TIME))
   {
-    //serial.println("Not work time will be checked");
+    Serial.println("Not work time will be checked");
             
     int hour_tmp = 0;
     
@@ -1034,25 +1037,26 @@ bool verifica_work_time()
 
         hour_tmp = rtc.getHour();
 
-        //serial.print("RTC Hour_tmp:");
-        //serial.println(hour_tmp);
+        Serial.print("RTC Hour_tmp:");
+        Serial.println(hour_tmp);
     
         if(hour_tmp != hour)
         {
-          //serial.println("Failed to verify Not work time");
+          Serial.println("Failed to verify Not work time");
                   
           return true;
         }
     }
 
-    //serial.println("Not work time");
+    Serial.println("Not work time");
             
     return false;
   }
 
-  ////serial.println("work time");
+  //Serial.println("work time");
   return true;
 }
+*/
 
 bool check_switch_state()
 {
@@ -1171,8 +1175,8 @@ bool check_onoff_switch()
   //if(!digitalRead(main_switch))
   //Se o switch estiver ligado e estiver dentro do horario de trabalho
   //devolve true para o ciclo de controlo
-  if( (check_switch_state()) && (verifica_work_time()) )
-  //if(verifica_work_time())
+  //if( (check_switch_state()) && (verifica_work_time()) )
+  if(check_switch_state())
   {
     ////serial.println("ON");
         
